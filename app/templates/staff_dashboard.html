@@ -1,0 +1,30 @@
+{% extends layout %}{% from '_icons.html' import icon %}
+{% block title %}Staff Dashboard · SmartCity{% endblock %}
+{% block content %}
+<section class="panel"><div class="panel-heading"><div><small class="eyebrow">SMARTCITY • STAFF PORTAL</small><h2>Welcome, {{ current_user['full_name'].split()[0] }}</h2><p>Your assigned garbage cleaning tasks. Status flow: Assigned → In Progress → Cleaned.</p></div></div>
+<div class="stat-cards">
+  <article class="stat-card"><span class="stat-ico amber">{{ icon('clipboard', 26) }}</span><div><strong>{{ summary['assigned'] }}</strong><span>Assigned</span></div></article>
+  <article class="stat-card"><span class="stat-ico blue">{{ icon('edit', 26) }}</span><div><strong>{{ summary['in_progress'] }}</strong><span>In Progress</span></div></article>
+  <article class="stat-card"><span class="stat-ico green">{{ icon('check', 26) }}</span><div><strong>{{ summary['cleaned'] }}</strong><span>Cleaned</span></div></article>
+  <article class="stat-card"><span class="stat-ico red">{{ icon('alert', 26) }}</span><div><strong>{{ summary['open_issues'] }}</strong><span>Issues reported</span></div></article>
+</div></section>
+
+<section class="panel" id="tasks"><div class="panel-heading"><div><h2>My assigned cases</h2><p>{{ active_tasks|length }} active task{{ '' if active_tasks|length == 1 else 's' }}. Open a task to see the photo, location and directions.</p></div></div>
+{% if active_tasks %}<div class="task-grid">{% for t in active_tasks %}
+<article class="task-card">
+  <a class="task-photo" href="{{ url_for('staff_task', case_id=t['id']) }}"><img src="{{ url_for('static', filename=t['result_path']) }}" alt="Garbage for case {{ t['id'] }}"></a>
+  <div class="task-body">
+    <div class="task-top"><b>Case #{{ t['id'] }}</b><span class="pill {{ t['status']|status_class }}">{{ {'ASSIGNED':'Assigned','CLEANING':'In Progress'}.get(t['status']) }}</span></div>
+    <span class="badge {{ (t['risk_level'] or 'low')|lower }}">{{ t['risk_level'] }} risk</span>
+    <p class="task-loc">{{ icon('pin', 15) }} {{ t['address'] or ('Coordinates saved' if t['latitude'] is not none else 'Location not shared') }}</p>
+    <div class="task-actions"><a class="button" href="{{ url_for('staff_task', case_id=t['id']) }}">{{ 'Continue task' if t['status'] == 'CLEANING' else 'View & start' }}</a>{% if t['latitude'] is not none %}<a class="button secondary" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination={{ t['latitude'] }},{{ t['longitude'] }}&travelmode=driving">Directions</a>{% endif %}</div>
+  </div>
+</article>{% endfor %}</div>
+{% else %}<div class="empty"><b>No active tasks</b><p>When the administrator assigns you a garbage case it will appear here and you will get a notification.</p></div>{% endif %}</section>
+
+{% if issues %}<section class="panel"><div class="panel-heading"><div><h2>Issues I reported</h2><p>Locations that could not be cleaned. The administrator reassigns these cases.</p></div></div>
+<div class="activity-list">{% for i in issues %}<div class="activity"><div><strong>Case #{{ i['case_id'] }} · {{ i['reason'] }}</strong><span>{{ i['address'] or 'Location not shared' }}{% if i['details'] %} — {{ i['details'] }}{% endif %}</span></div><b><span class="pill {{ 'pending' if i['status'] == 'OPEN' else 'resolved' }}">{{ 'Open' if i['status'] == 'OPEN' else 'Reassigned' }}</span><br><small>{{ i['created_at']|india_datetime }}</small></b></div>{% endfor %}</div></section>{% endif %}
+
+{% if done_tasks %}<section class="panel"><div class="panel-heading"><div><h2>Cleaned by me</h2><p>{{ done_tasks|length }} completed case{{ '' if done_tasks|length == 1 else 's' }}.</p></div></div>
+<div class="table-wrap"><table><thead><tr><th>Case</th><th>Location</th><th>Completed</th><th>Time taken</th><th></th></tr></thead><tbody>{% for t in done_tasks %}<tr><td><b>#{{ t['id'] }}</b></td><td>{{ t['address'] or 'Location not shared' }}</td><td>{{ t['completed_at']|india_datetime }}</td><td>{{ t['resolution_minutes']|duration }}</td><td><a class="mini-btn view" href="{{ url_for('staff_task', case_id=t['id']) }}">View</a></td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends layout %}{% from '_icons.html' import icon %}
+{% block title %}My Profile · SmartCity{% endblock %}
+{% block content %}
+<section class="profile-layout">
+  <aside class="panel profile-card"><span class="avatar xl">{{ user_initials }}</span><h2>{{ current_user['full_name'] }}</h2><p class="muted-note">@{{ current_user['username'] }}</p><span class="pill {{ 'progress' if is_admin else 'resolved' }}">{{ 'Administrator' if is_admin else 'Citizen' }}</span>
+    <dl class="profile-facts"><dt>Member since</dt><dd>{{ current_user['created_at']|india_datetime }}</dd><dt>Last sign-in</dt><dd>{{ current_user['last_login_at']|india_datetime if current_user['last_login_at'] else 'This is your first sign-in' }}</dd></dl>
+    {% if summary %}<div class="mini-stats"><div><b>{{ summary['total'] }}</b><small>Reports</small></div><div><b>{{ summary['pending'] + summary['in_progress'] }}</b><small>Open</small></div><div><b>{{ summary['resolved'] }}</b><small>Resolved</small></div></div><a class="button wide" href="{{ url_for('my_reports') }}">View my reports</a>{% elif is_admin %}<div class="mini-stats"><div><b>{{ total_users }}</b><small>Citizens</small></div></div>{% endif %}
+    <form method="post" action="{{ url_for('logout') }}"><button class="button wide outline-danger" type="submit">{{ icon('logout', 17) }} Logout</button></form></aside>
+  <div>
+    <section class="panel"><h2>Account details</h2><p class="muted-note">Your username cannot be changed.</p>{% for e in errors %}<div class="alert error">{{ e }}</div>{% endfor %}
+      <form method="post" class="stack-form"><label>Full name<input name="full_name" value="{{ request.form.get('full_name', current_user['full_name']) }}" required maxlength="80"></label><label>Email<input type="email" name="email" value="{{ request.form.get('email', current_user['email'] or '') }}" placeholder="you@example.com"></label><label>Phone<input name="phone" value="{{ request.form.get('phone', current_user['phone'] or '') }}" placeholder="Optional"></label><label>Username<input value="{{ current_user['username'] }}" disabled></label><button class="button" type="submit">Save changes</button></form></section>
+    <section class="panel" id="password"><h2>Change password</h2>
+      <form method="post" action="{{ url_for('change_password') }}" class="stack-form"><label>Current password<input type="password" name="current_password" autocomplete="current-password" required></label><label>New password<input type="password" name="new_password" autocomplete="new-password" minlength="6" required></label><label>Confirm new password<input type="password" name="confirm_password" autocomplete="new-password" minlength="6" required></label><button class="button" type="submit">Update password</button></form></section>
+  </div>
+</section>
+{% endblock %}

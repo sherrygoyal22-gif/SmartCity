@@ -1,0 +1,26 @@
+{% from '_icons.html' import icon, logo %}{% set p = active_path %}{% set nav = [
+ ('Dashboard', 'home', url_for('admin_dashboard'), p == '/admin'),
+ ('All Reports', 'list', url_for('admin_reports'), p == '/admin/reports' or p.startswith('/reports/')),
+ ('Garbage Map & Hotspots', 'map', url_for('map_view'), p == '/map'),
+ ('Case Management', 'clipboard', url_for('cases'), p.startswith('/admin/cases')),
+ ('Live Detection', 'camera', url_for('detect'), p == '/detect'),
+ ('User Reports', 'chart', url_for('user_reports'), p == '/admin/user-reports'),
+ ('Notifications', 'bell', url_for('notifications'), p == '/notifications'),
+ ('User Management', 'users', url_for('users_admin'), p == '/admin/users'),
+ ('Admin Location', 'building', url_for('admin_location_page'), p == '/admin/location'),
+] %}{% set tabs = [
+ ('Dashboard', 'home', url_for('admin_dashboard'), p == '/admin'),
+ ('Reports', 'list', url_for('admin_reports'), p == '/admin/reports' or p.startswith('/reports/')),
+ ('Live Detection', 'camera', url_for('detect'), p == '/detect'),
+ ('Map', 'map', url_for('map_view'), p == '/map'),
+ ('Cases', 'clipboard', url_for('cases'), p.startswith('/admin/cases')),
+ ('Users', 'users', url_for('users_admin'), p == '/admin/users'),
+ ('Notifications', 'bell', url_for('notifications'), p == '/notifications'),
+ ('Settings', 'building', url_for('admin_location_page'), p == '/admin/location'),
+] %}<!doctype html><html lang="en"><head><meta charset="utf-8">{% include '_pwa_head.html' %}<title>{% block title %}Admin · SmartCity Garbage Detection{% endblock %}</title><link rel="stylesheet" href="{{ url_for('static',filename='css/app.css') }}"><link rel="stylesheet" href="{{ url_for('static',filename='css/final-ui.css') }}"><link rel="stylesheet" href="{{ url_for('static',filename='css/final-polish.css') }}"><link rel="stylesheet" href="{{ url_for('static',filename='css/ui-polish-v2.css') }}"><link rel="stylesheet" href="{{ url_for('static',filename='css/portal.css') }}">{% block head %}{% endblock %}</head><body class="admin-body" data-page="{{ active_path }}">
+<div class="admin-shell">
+<header class="admin-topbar"><button class="admin-menu-btn" type="button" data-admin-menu aria-label="Toggle navigation">{{ icon('menu', 22) }}</button><a class="brand" href="{{ url_for('admin_dashboard') }}">{{ logo(38) }}<span><strong>SmartCity</strong><small>AI Garbage Detection</small></span></a><span class="admin-badge">Admin</span><nav class="admin-tabs" aria-label="Admin header navigation">{% for label, ico, href, active in tabs %}<a class="{{ 'active' if active }}" href="{{ href }}" title="{{ label }}">{{ icon(ico, 16) }}<span>{{ label }}</span>{% if label == 'Notifications' and unread_notifications %}<em class="count">{{ unread_notifications }}</em>{% endif %}</a>{% endfor %}</nav><div class="admin-topbar-tools"><a class="tool-link bell-link" href="{{ url_for('notifications') }}" aria-label="Notifications">{{ icon('bell', 22) }}{% if unread_notifications %}<b>{{ unread_notifications }}</b>{% endif %}</a>{% include '_profile_menu.html' %}</div></header>
+<aside class="admin-sidebar" id="sidebar" aria-label="Admin navigation"><nav>{% for label, ico, href, active in nav %}<a class="{{ 'active' if active }}" href="{{ href }}">{{ icon(ico, 19) }}<span>{{ label }}</span>{% if label == 'Notifications' and unread_notifications %}<em class="count">{{ unread_notifications }}</em>{% endif %}</a>{% endfor %}</nav><div class="admin-side-foot"><a class="{{ 'active' if p == '/profile' }}" href="{{ url_for('profile') }}">{{ icon('user', 19) }}<span>Profile</span></a><form method="post" action="{{ url_for('logout') }}"><button type="submit">{{ icon('logout', 19) }}<span>Logout</span></button></form></div></aside>
+<div class="admin-backdrop"></div>
+<main class="admin-content">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast {{ category }}">{{ message }}<button>×</button></div>{% endfor %}{% endwith %}{% block content %}{% endblock %}</main>
+</div><script src="{{ url_for('static',filename='js/ui.js') }}"></script><script src="{{ url_for('static',filename='js/app.js') }}"></script>{% block scripts %}{% endblock %}</body></html>

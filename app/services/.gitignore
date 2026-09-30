@@ -1,0 +1,15 @@
+Set-Content .gitignore @(
+
+"__pycache__/"
+"*.py[cod]"
+"app/database/.secret_key"
+"app/database/smartcity.db"
+"app/static/uploads/*"
+"app/static/results/*"
+"!app/static/uploads/.gitkeep"
+"!app/static/results/.gitkeep"
+"venv/"
+".venv/"
+"env/"
+".vscode/"
+)

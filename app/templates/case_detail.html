@@ -1,0 +1,89 @@
+{% extends 'admin_base.html' %}{% from '_icons.html' import icon %}
+{% block title %}Case #{{ case['id'] }} · SmartCity{% endblock %}
+{% block content %}
+<style>
+.case-summary .panel-heading{align-items:center;margin-bottom:12px}
+.case-dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px 32px;margin:0}
+.case-dl .cd dt{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#69766f}
+.case-dl .cd dd{margin:2px 0 0}
+</style>
+<section class="evidence-grid">
+  <div class="panel result-image"><h2>Before cleaning</h2><p>The validated detection result is retained as the original evidence.</p><img src="{{ url_for('static', filename=case['result_path']) }}" alt="Garbage before cleaning for case {{ case['id'] }}"></div>
+  {% if case['before_image_path'] %}<div class="panel result-image"><h2>Before cleaning (staff photo)</h2><p>Taken on site by the assigned staff member.</p><img src="{{ url_for('static', filename=case['before_image_path']) }}" alt="Staff before-cleaning evidence for case {{ case['id'] }}"></div>{% endif %}
+  <div class="panel result-image"><h2>After cleaning</h2>{% if case['after_image_path'] %}<img src="{{ url_for('static', filename=case['after_image_path']) }}" alt="After-cleaning evidence for case {{ case['id'] }}">{% else %}<div class="empty compact"><b>Not uploaded yet</b><p>Upload a valid after-cleaning image before completing this case.</p></div>{% endif %}</div>
+</section>
+<div class="crumbs"><a href="{{ url_for('cases') }}">{{ icon('back', 15) }} All cases</a></div>
+<section class="panel case-summary"><div class="panel-heading"><h2>Case #{{ case['id'] }} details</h2><div class="actions"><a class="button" href="{{ url_for('report', detection_id=case['detection_id']) }}">View detection report</a><form method="post" action="{{ url_for('delete_case', case_id=case['id']) }}" data-confirm="Delete Case #{{ case['id'] }} and its report? This cannot be undone."><button class="danger" type="submit">Delete case</button></form></div></div><dl class="case-dl"><div class="cd"><dt>Alert</dt><dd>#{{ case['alert_id'] }}</dd></div><div class="cd"><dt>Status</dt><dd><span class="pill {{ case['status']|status_class }}">{{ case['status']|status_label }}</span></dd></div><div class="cd"><dt>Reported by</dt><dd>{% if reporter %}<a href="{{ url_for('admin_reports', user=reporter['id']) }}">{{ reporter['full_name'] }}</a> <small>@{{ reporter['username'] }}</small>{% else %}Unknown / deleted account{% endif %}</dd></div><div class="cd"><dt>Risk</dt><dd>{{ case['risk_level'] }} ({{ case['risk_score'] }}/100)<br><small>{{ case['risk_reason'] }}</small></dd></div><div class="cd"><dt>Confidence</dt><dd>{{ case['confidence']|percent }}</dd></div><div class="cd"><dt>Detected at</dt><dd>{{ case['created_at']|india_datetime }}</dd></div>{% if case['completed_at'] %}<div class="cd"><dt>Completed at</dt><dd>{{ case['completed_at']|india_datetime }}</dd></div><div class="cd"><dt>Resolution time</dt><dd>Resolved in {{ case['resolution_minutes']|duration }}</dd></div><div class="cd"><dt>Completion notes</dt><dd>{{ case['completion_notes'] }}</dd></div>{% endif %}<div class="cd"><dt>Location</dt><dd>{{ case['address'] or 'Not provided' }}{% if case['latitude'] is not none %}<br>{{ case['latitude'] }}, {{ case['longitude'] }}{% endif %}</dd></div><div class="cd"><dt>Validation</dt><dd>{{ case['validation_reason'] }}</dd></div>{% if case['is_duplicate'] %}<div class="cd"><dt>Repeated location</dt><dd>{{ case['duplicate_reason'] }}</dd></div>{% endif %}<div class="cd"><dt>Assigned to</dt><dd>{{ case['assignee_name'] or 'Unassigned' }}</dd></div><div class="cd"><dt>Working notes</dt><dd>{{ case['notes'] or 'None' }}</dd></div></dl></section>
+{% set st = case['status'] %}
+{% set has_after = case['after_image_path'] %}
+<style>
+.wf-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 16px;padding:0;list-style:none}
+.wf-steps li{padding:9px 10px;border-bottom:3px solid #dce5df;font-size:12px;text-align:center;color:#69766f}
+.wf-steps li.done{border-color:#198754;color:#146c43}
+.wf-steps li.current{border-color:#1769aa;color:#1769aa;font-weight:700}
+.wf-step{border:1px solid #dfe6e1;border-radius:8px;padding:16px;margin-bottom:12px;background:#fff}
+.wf-step.active{border-color:#198754;box-shadow:0 0 0 2px #19875422}
+.wf-step.locked{background:#f7f9f8}
+.wf-step h3{margin:0 0 4px;font-size:16px}
+.wf-step p.hint{margin:0 0 10px;font-size:13px;color:#69766f}
+.wf-step form{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+.wf-step fieldset{border:0;padding:0;margin:0;min-width:0;display:contents}
+.wf-step fieldset:disabled input,.wf-step fieldset:disabled select,.wf-step fieldset:disabled button{opacity:.55;cursor:not-allowed}
+.wf-badge{font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;margin-left:8px;background:#e8f2ec;color:#146c43}
+.wf-badge.locked{background:#eceff1;color:#69766f}
+@media(max-width:700px){.wf-steps{grid-template-columns:repeat(2,1fr)}}
+</style>
+<section class="panel">
+  <h2>Case actions</h2>
+  <ol class="wf-steps">
+    <li class="{{ 'done' if st != 'PENDING' else 'current' }}">1. Assign</li>
+    <li class="{{ 'done' if st in ['CLEANING','COMPLETED'] else ('current' if st == 'ASSIGNED' else '') }}">2. Start cleaning</li>
+    <li class="{{ 'done' if has_after else ('current' if st == 'CLEANING' else '') }}">3. After photo</li>
+    <li class="{{ 'done' if st == 'COMPLETED' else ('current' if st == 'CLEANING' and has_after else '') }}">4. Resolve</li>
+  </ol>
+
+  {# Step 1: assign #}
+  <div class="wf-step {{ 'active' if st in ['PENDING','ASSIGNED'] else 'locked' }}">
+    <h3>Assign worker or team{% if st in ['PENDING','ASSIGNED'] %}<span class="wf-badge">{{ 'Reassign' if st == 'ASSIGNED' else 'Do this now' }}</span>{% else %}<span class="wf-badge locked">{{ 'Done' if st != 'PENDING' else '' }}</span>{% endif %}</h3>
+    <p class="hint">{% if st == 'COMPLETED' %}Case is completed.{% elif st == 'CLEANING' %}Assignment is locked once cleaning has started.{% else %}Choose who will clean this location.{% endif %}</p>
+    <form method="post" action="{{ url_for('assign_case', case_id=case['id']) }}"><fieldset {% if st not in ['PENDING','ASSIGNED'] %}disabled{% endif %}>
+      <select name="assignee_id" required><option value="">Choose a staff member, worker or team</option>{% for assignee in assignees %}<option value="{{ assignee['id'] }}">{{ assignee['name'] }} ({{ 'Staff login' if assignee['user_id'] else (assignee['kind'].title() ~ ' · demo') }})</option>{% endfor %}</select>
+      <input name="notes" maxlength="1000" value="{{ case['notes'] or '' }}" placeholder="Assignment notes">
+      <button class="button" type="submit">Assign case</button>
+    </fieldset></form>
+  </div>
+
+  {# Step 2: start cleaning #}
+  <div class="wf-step {{ 'active' if st == 'ASSIGNED' else 'locked' }}">
+    <h3>Start cleaning{% if st == 'ASSIGNED' %}<span class="wf-badge">Do this now</span>{% elif st in ['CLEANING','COMPLETED'] %}<span class="wf-badge locked">Done</span>{% else %}<span class="wf-badge locked">Locked</span>{% endif %}</h3>
+    <p class="hint">{% if st == 'PENDING' %}Assign a worker or team first.{% elif st == 'ASSIGNED' %}Mark the case as cleaning when work begins.{% else %}Cleaning has already started.{% endif %}</p>
+    <form method="post" action="{{ url_for('update_case_status', case_id=case['id']) }}"><fieldset {% if st != 'ASSIGNED' %}disabled{% endif %}>
+      <input type="hidden" name="status" value="CLEANING">
+      <input name="notes" maxlength="1000" value="{{ case['notes'] or '' }}" placeholder="Cleaning notes">
+      <button class="button" type="submit">Mark as cleaning</button>
+    </fieldset></form>
+  </div>
+
+  {# Step 3: after photo #}
+  <div class="wf-step {{ 'active' if st == 'CLEANING' and not has_after else 'locked' }}">
+    <h3>Upload after-cleaning photo{% if st == 'CLEANING' and not has_after %}<span class="wf-badge">Do this now</span>{% elif has_after %}<span class="wf-badge locked">Done</span>{% else %}<span class="wf-badge locked">Locked</span>{% endif %}</h3>
+    <p class="hint">{% if st in ['PENDING','ASSIGNED'] %}Available after the case is marked as cleaning.{% elif has_after %}After-cleaning evidence is uploaded.{% else %}Upload a clear photo of the cleaned location (JPG, PNG or WEBP).{% endif %}</p>
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('upload_after_image', case_id=case['id']) }}"><fieldset {% if not (st == 'CLEANING' and not has_after) %}disabled{% endif %}>
+      <input type="file" name="after_image" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
+      <button class="button" type="submit">Upload after image</button>
+    </fieldset></form>
+  </div>
+
+  {# Step 4: complete #}
+  <div class="wf-step {{ 'active' if st == 'CLEANING' and has_after else 'locked' }}">
+    <h3>Mark case as resolved{% if st == 'CLEANING' and has_after %}<span class="wf-badge">Do this now</span>{% elif st == 'COMPLETED' %}<span class="wf-badge locked">Done</span>{% else %}<span class="wf-badge locked">Locked</span>{% endif %}</h3>
+    <p class="hint">{% if st == 'COMPLETED' %}This case is resolved and closed.{% elif st == 'CLEANING' and has_after %}Add completion notes to close this case.{% else %}Available after the after-cleaning photo is uploaded.{% endif %}</p>
+    <form method="post" action="{{ url_for('complete_case', case_id=case['id']) }}"><fieldset {% if not (st == 'CLEANING' and has_after) %}disabled{% endif %}>
+      <input name="completion_notes" maxlength="1000" required placeholder="What cleaning work was completed?">
+      <button class="button" type="submit">Mark as resolved</button>
+    </fieldset></form>
+  </div>
+</section>
+{% if issues %}<section class="panel"><div class="panel-heading"><div><h2>Issues reported by staff</h2><p>The staff member could not clean this location. Reassign the case to continue.</p></div></div><div class="activity-list">{% for i in issues %}<div class="activity"><div><strong>{{ i['reason'] }}{% if i['status'] == 'OPEN' %} <span class="pill pending">Open</span>{% else %} <span class="pill resolved">Reassigned</span>{% endif %}</strong><span>{{ i['staff_name'] or 'Former staff member' }}{% if i['details'] %} — {{ i['details'] }}{% endif %}</span></div><b>{{ i['created_at']|india_datetime }}</b></div>{% endfor %}</div></section>{% endif %}
+<section class="panel"><div class="panel-heading"><div><h2>Case activity</h2><p>Alert, assignment, evidence, and completion history.</p></div></div>{% if events %}<div class="activity-list">{% for event in events %}<div class="activity"><div><strong>{{ event['event_type'].replace('_', ' ').title() }}</strong><span>{{ event['message'] }}</span></div><b>{{ event['created_at']|india_datetime }}</b></div>{% endfor %}</div>{% endif %}</section>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends layout %}{% from '_icons.html' import icon %}
+{% block title %}Report #{{ record['id'] }} · SmartCity{% endblock %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('admin_reports' if is_admin else 'my_reports') }}">{{ icon('back', 15) }} {{ 'All reports' if is_admin else 'My reports' }}</a></div>
+<section class="report-grid">
+  <div class="panel result-image"><img src="{{ url_for('static', filename=record['result_path']) }}" alt="Processed garbage detection result"><a class="button wide" href="{{ url_for('download_result', detection_id=record['id']) }}">{{ icon('download', 17) }} Download processed image</a></div>
+  <aside class="panel"><h2>Report #{{ record['id'] }}</h2>{% if case %}<p class="status-line">Status: <span class="pill {{ case['status']|status_class }}">{{ (case['status']|status_label) if is_admin else (case['status']|status_group) }}</span></p>{% endif %}<dl>
+    {% if is_admin %}<dt>Reported by</dt><dd>{% if reporter %}<a href="{{ url_for('admin_reports', user=reporter['id']) }}">{{ reporter['full_name'] }}</a> <small>@{{ reporter['username'] }}</small>{% else %}Unknown / deleted account{% endif %}</dd>{% endif %}
+    <dt>Detected garbage</dt><dd>{{ record['detection_count'] }} item{{ '' if record['detection_count']==1 else 's' }}</dd>
+    <dt>Average confidence</dt><dd>{{ record['confidence']|percent }}</dd>
+    <dt>Validation</dt><dd>{{ 'Validated' if record['is_valid'] else 'Not validated' }}{% if record['validation_reason'] %}<br><small>{{ record['validation_reason'] }}</small>{% endif %}</dd>
+    <dt>Priority risk</dt><dd>{{ record['risk_level'] or 'Not assessed' }}{% if record['risk_score'] is not none %} ({{ record['risk_score'] }}/100){% endif %}{% if record['risk_reason'] %}<br><small>{{ record['risk_reason'] }}</small>{% endif %}</dd>
+    {% if record['is_duplicate'] %}<dt>Repeated location</dt><dd><small>{{ record['duplicate_reason'] }}</small></dd>{% endif %}
+    <dt>Source</dt><dd>{{ record['source'].title() }}</dd>
+    <dt>Reported at</dt><dd>{{ record['created_at']|india_datetime }}</dd>
+    <dt>Location</dt><dd>{% if record['latitude'] is not none %}{{ record['latitude'] }}, {{ record['longitude'] }}{% if record['address'] %}<br>{{ record['address'] }}{% endif %}<br><a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination={{ record['latitude'] }},{{ record['longitude'] }}">Open in Google Maps</a>{% elif record['address'] %}{{ record['address'] }} (GPS unavailable){% else %}GPS unavailable and no manual location supplied{% endif %}</dd>
+    {% if case and case['assignee_name'] %}<dt>Assigned to</dt><dd>{{ case['assignee_name'] }}</dd>{% endif %}
+  </dl>{% if case and is_admin %}<a class="button wide" href="{{ url_for('case_detail', case_id=case['id']) }}">View case #{{ case['id'] }}</a>{% endif %}</aside>
+</section>
+{% if case and not is_admin %}
+<section class="panel"><h2>Report status</h2>
+  <ol class="status-track">{% set st = case['status'] %}
+    <li class="done"><b>Reported</b><small>{{ record['created_at']|india_datetime }}</small></li>
+    <li class="{{ 'done' if st != 'PENDING' else 'current' }}"><b>Assigned</b><small>{{ 'Assigned to ' ~ case['assignee_name'] if case['assignee_name'] else 'Waiting for the municipal team' }}</small></li>
+    <li class="{{ 'done' if st in ['CLEANING','COMPLETED'] else ('current' if st == 'ASSIGNED' else '') }}"><b>Cleaning</b><small>{{ 'Cleanup underway' if st == 'CLEANING' else ('Done' if st == 'COMPLETED' else 'Not started') }}</small></li>
+    <li class="{{ 'done' if st == 'COMPLETED' else '' }}"><b>Resolved</b><small>{{ case['completed_at']|india_datetime if case['completed_at'] else 'Pending' }}</small></li>
+  </ol>
+  {% if case['after_image_path'] and st == 'COMPLETED' %}<div class="evidence-grid ba"><div><h3>Before</h3><img src="{{ url_for('static', filename=case['result_path']) }}" alt="Before cleaning"></div><div><h3>After cleaning</h3><img src="{{ url_for('static', filename=case['after_image_path']) }}" alt="After cleaning"></div></div>{% endif %}
+  {% if events %}<div class="activity-list">{% for event in events if event['event_type'] not in ['ALERT_CREATED'] %}<div class="activity"><div><strong>{{ event['event_type'].replace('_', ' ').title() }}</strong><span>{{ event['message'] }}</span></div><b>{{ event['created_at']|india_datetime }}</b></div>{% endfor %}</div>{% endif %}
+</section>
+{% elif not case and not is_admin %}<section class="panel"><h2>Report status</h2><p>{% if record['detection_count'] == 0 %}No garbage was detected in this image, so no cleanup case was opened.{% else %}This report was not validated as garbage, so no cleanup case was opened.{% endif %}</p></section>{% endif %}
+{% endblock %}

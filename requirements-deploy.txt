@@ -1,0 +1,8 @@
+# Used when hosting online (Render, Railway, a VPS...). Headless OpenCV avoids
+# the missing-libGL error on servers that have no display.
+Flask>=3.0
+Werkzeug>=3.0
+gunicorn>=22.0
+opencv-python-headless>=4.8
+numpy>=1.26
+ultralytics>=8.4.0

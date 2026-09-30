@@ -1,0 +1,72 @@
+{% extends 'admin_base.html' %}{% from '_icons.html' import icon %}
+{% block title %}Admin Location · SmartCity{% endblock %}
+{% block head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>{% endblock %}
+{% block content %}
+<section class="panel"><div class="panel-heading"><div><small class="eyebrow">SMARTCITY • OFFICE LOCATION</small><h2>Admin Location</h2><p>Every map popup shows its distance and direction from this point. Click the map or drag the pin to move it.</p></div></div>
+{% for e in errors %}<div class="alert error">{{ e }}</div>{% endfor %}
+<div class="location-grid"><div id="locMap" class="loc-map" data-lat="{{ location['lat'] }}" data-lng="{{ location['lng'] }}"></div>
+<form method="post" class="loc-form">
+<label>Office name<input name="label" maxlength="80" value="{{ location['label'] }}" required></label>
+<div class="field-pair">
+<label>State / UT<input id="stateInput" name="state" list="stateList" maxlength="80" value="{{ location['state'] }}" placeholder="e.g. Punjab" autocomplete="off"></label>
+<label>City<input id="cityInput" name="city" maxlength="80" value="{{ location['city'] }}" placeholder="e.g. Mohali" autocomplete="off"></label>
+</div>
+<datalist id="stateList">{% for st in states %}<option value="{{ st }}">{% endfor %}</datalist>
+<p class="muted-note">Pick a state and/or city and the map and coordinates are filled in automatically.</p>
+<div class="field-pair">
+<label>Latitude <small>(optional)</small><input id="latInput" name="latitude" type="number" step="any" min="-90" max="90" value="{{ location['lat'] }}" placeholder="auto"></label>
+<label>Longitude <small>(optional)</small><input id="lngInput" name="longitude" type="number" step="any" min="-180" max="180" value="{{ location['lng'] }}" placeholder="auto"></label>
+</div>
+<button class="button secondary" type="button" id="useMyLocation">{{ icon('pin', 17) }} Use my current location</button>
+<p id="locStatus" class="muted-note" aria-live="polite"></p>
+<button class="button" type="submit">Save location</button></form></div></section>
+{% endblock %}
+{% block scripts %}<script>
+(() => {
+  const el = document.getElementById("locMap");
+  const latInput = document.getElementById("latInput"), lngInput = document.getElementById("lngInput");
+  const stateInput = document.getElementById("stateInput"), cityInput = document.getElementById("cityInput");
+  const status = document.getElementById("locStatus");
+  const lookupUrl = "{{ url_for('admin_location_lookup') }}";
+  const start = [parseFloat(el.dataset.lat) || 30.9010, parseFloat(el.dataset.lng) || 75.8573];
+  const map = L.map(el).setView(start, 14);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution: "© OpenStreetMap", maxZoom: 19}).addTo(map);
+  const marker = L.marker(start, {draggable: true}).addTo(map);
+  const say = (text) => { status.textContent = text; };
+  const place = (lat, lng, zoom) => { latInput.value = lat.toFixed(6); lngInput.value = lng.toFixed(6); marker.setLatLng([lat, lng]); if (zoom) map.setView([lat, lng], zoom); };
+  const getJson = async (params) => { try { const r = await fetch(lookupUrl + "?" + new URLSearchParams(params)); return await r.json(); } catch (e) { return {ok: false, error: "Could not reach the server."}; } };
+
+  // city / state typed -> find coordinates automatically
+  let timer = null;
+  const findPlace = async () => {
+    const city = cityInput.value.trim(), state = stateInput.value.trim();
+    if (!city && !state) return;
+    say("Finding location...");
+    const data = await getJson({city, state});
+    if (data.ok) { place(data.lat, data.lng, city ? 13 : 8); say("Location found. Press Save to keep it."); }
+    else say(data.error || "Could not find that place.");
+  };
+  const queueFind = () => { clearTimeout(timer); timer = setTimeout(findPlace, 700); };
+  stateInput.addEventListener("input", queueFind); cityInput.addEventListener("input", queueFind);
+  stateInput.addEventListener("change", () => { clearTimeout(timer); findPlace(); });
+  cityInput.addEventListener("change", () => { clearTimeout(timer); findPlace(); });
+
+  // pin moved / map clicked / GPS used -> fill city and state from the point
+  const fillNames = async (lat, lng) => {
+    const data = await getJson({lat, lng});
+    if (data.ok) { cityInput.value = data.city || ""; stateInput.value = data.state || ""; }
+  };
+  const moved = (lat, lng, zoom) => { place(lat, lng, zoom); say("Location set. Press Save to keep it."); fillNames(lat, lng); };
+  marker.on("dragend", () => { const p = marker.getLatLng(); moved(p.lat, p.lng); });
+  map.on("click", (e) => moved(e.latlng.lat, e.latlng.lng));
+  const fromInputs = () => { const a = parseFloat(latInput.value), b = parseFloat(lngInput.value); if (!isNaN(a) && !isNaN(b)) { marker.setLatLng([a, b]); map.setView([a, b]); fillNames(a, b); } };
+  latInput.addEventListener("change", fromInputs); lngInput.addEventListener("change", fromInputs);
+  document.getElementById("useMyLocation").addEventListener("click", () => {
+    if (!navigator.geolocation) { say("This browser cannot share its location."); return; }
+    say("Finding your location...");
+    navigator.geolocation.getCurrentPosition((pos) => { moved(pos.coords.latitude, pos.coords.longitude, 16); },
+      () => { say("Could not get your location. Allow location access, or type a city / state, or click the map."); }, {enableHighAccuracy: true, timeout: 10000});
+  });
+  setTimeout(() => map.invalidateSize(), 300);
+})();
+</script>{% endblock %}

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  {% include '_pwa_head.html' %}
+  <title>SmartCity Garbage Detection</title>
+  <style>
+    :root { color-scheme: light; --green: #16a34a; --ink: #172033; --muted: #657086; --line: #dce3ed; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; font-family: Arial, sans-serif; color: var(--ink); background: linear-gradient(145deg, #effaf2, #f7f9fc 45%, #edf4ff); }
+    main { width: min(960px, calc(100% - 32px)); margin: 0 auto; padding: 54px 0; }
+    header { text-align: center; margin-bottom: 30px; }
+    h1 { margin: 0 0 10px; font-size: clamp(1.9rem, 5vw, 2.8rem); }
+    header p { margin: 0; color: var(--muted); font-size: 1.05rem; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 14px 36px rgb(22 44 80 / 8%); padding: clamp(20px, 4vw, 34px); }
+    form { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    input[type=file] { flex: 1 1 280px; padding: 13px; border: 1px dashed #9bacbf; border-radius: 10px; color: var(--muted); background: #fafcff; }
+    button { border: 0; border-radius: 10px; background: var(--green); color: white; cursor: pointer; font-weight: 700; font-size: 1rem; padding: 14px 21px; }
+    button:hover { background: #12813b; }
+    .notice { margin: 20px 0 0; padding: 13px 15px; border-radius: 10px; }
+    .error { color: #9f1239; background: #fff1f2; }
+    .success { color: #166534; background: #f0fdf4; }
+    .result { margin-top: 26px; }
+    .result h2 { margin: 0 0 14px; font-size: 1.35rem; }
+    .result img { display: block; width: 100%; max-height: 650px; object-fit: contain; border: 1px solid var(--line); border-radius: 12px; background: #f7f9fc; }
+    .help { margin: 18px 0 0; text-align: center; color: var(--muted); font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <header><h1>SmartCity Garbage Detection</h1><p>Upload a photo to identify visible garbage using the trained YOLO model.</p></header>
+    <section class="card">
+      <form method="post" enctype="multipart/form-data">
+        <input id="image" name="image" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
+        <button type="submit">Detect Garbage</button>
+      </form>
+      {% if error %}<p class="notice error">{{ error }}</p>{% endif %}
+      {% if result_url %}
+        <div class="result">
+          <p class="notice success">{% if detection_count %}{{ detection_count }} garbage item{{ '' if detection_count == 1 else 's' }} detected.{% else %}No garbage detected in this image.{% endif %}</p>
+          <h2>Detection result</h2>
+          <img src="{{ result_url }}" alt="Garbage detection result with labelled bounding boxes">
+        </div>
+      {% endif %}
+      <p class="help">Supported formats: JPG, PNG, WEBP · Maximum file size: 16 MB</p>
+    </section>
+  </main>
+</body>
+</html>

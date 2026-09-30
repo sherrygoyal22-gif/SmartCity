@@ -1,0 +1,23 @@
+# One-click hosting on Render.com (Blueprint). Gives you an https:// link that
+# opens on any Android / iPhone without your PC running.
+services:
+  - type: web
+    name: smartcity-garbage-detection
+    runtime: python
+    plan: starter            # the YOLO model needs ~1 GB RAM; the free 512 MB plan will run out
+    buildCommand: pip install -r requirements-deploy.txt
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 180
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SMARTCITY_SECRET_KEY
+        generateValue: true
+      - key: SMARTCITY_BEHIND_PROXY
+        value: "1"
+      - key: SMARTCITY_DATA_DIR      # database + uploaded photos live on the disk below
+        value: /var/data
+    disk:                    # survives redeploys, so reports and cases are kept
+      name: smartcity-data
+      mountPath: /var/data
+      sizeGB: 1

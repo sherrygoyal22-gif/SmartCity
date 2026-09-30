@@ -1,0 +1,21 @@
+{% from '_icons.html' import icon, logo %}<!doctype html><html lang="en"><head><title>Register · SmartCity</title>{% include '_auth_head.html' %}</head>
+<body class="auth-body user-auth"><main class="auth-stage" style="--auth-bg:url('{{ url_for('static', filename='images/smartcity-hero.jpg') }}')">
+<section class="auth-card wide">
+  <div class="auth-brand">{{ logo(58) }}<strong>SmartCity</strong><small>AI Garbage Detection</small></div>
+  <h1>Create your account</h1><p class="auth-sub">Register to report garbage and follow each report until it is cleaned</p>
+  {% include '_auth_messages.html' %}
+  <form method="post" class="auth-form" novalidate>
+    <label class="field"><span class="field-icon">{{ icon('user', 18) }}</span><input name="full_name" value="{{ values.get('full_name','') }}" placeholder="Full name" autocomplete="name" required aria-label="Full name"></label>
+    <div class="field-pair">
+      <label class="field"><span class="field-icon">{{ icon('user', 18) }}</span><input name="username" value="{{ values.get('username','') }}" placeholder="Username" autocomplete="username" required aria-label="Username"></label>
+      <label class="field"><span class="field-icon">{{ icon('phone', 18) }}</span><input name="phone" value="{{ values.get('phone','') }}" placeholder="Phone (optional)" autocomplete="tel" aria-label="Phone"></label>
+    </div>
+    <label class="field"><span class="field-icon">{{ icon('mail', 18) }}</span><input type="email" name="email" value="{{ values.get('email','') }}" placeholder="Email (optional)" autocomplete="email" aria-label="Email"></label>
+    <div class="field-pair">
+      <label class="field"><span class="field-icon">{{ icon('lock', 18) }}</span><input id="password" type="password" name="password" placeholder="Password (min 6)" autocomplete="new-password" required aria-label="Password"><button type="button" class="field-toggle" data-toggle-password="password" aria-label="Show password">{{ icon('eye', 18) }}</button></label>
+      <label class="field"><span class="field-icon">{{ icon('lock', 18) }}</span><input id="confirm_password" type="password" name="confirm_password" placeholder="Confirm password" autocomplete="new-password" required aria-label="Confirm password"></label>
+    </div>
+    <button class="auth-submit" type="submit">Create account <span aria-hidden="true">→</span></button>
+  </form>
+  <p class="auth-switch">Already registered? <a href="{{ url_for('login') }}">Back to User Login</a></p>
+</section></main><script src="{{ url_for('static',filename='js/ui.js') }}"></script></body></html>

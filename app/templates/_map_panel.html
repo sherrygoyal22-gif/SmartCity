@@ -1,0 +1,10 @@
+{% from '_icons.html' import icon %}
+{# Shared "City Garbage Map" card used by both dashboards. Needs: map_data, hotspots, admin_latitude/longitude, summary #}
+<section class="panel home-map-panel dash-map-panel"><div class="panel-heading"><div><h2>{{ icon('pin', 20) }} City Garbage Map</h2><p>Real GPS reports, hotspots and case status.</p></div><a href="{{ url_for('map_view') }}">View Full Map →</a></div>
+<div class="map-legend home-map-legend"><span><i class="risk-dot high"></i>High Risk</span><span><i class="risk-dot medium"></i>Medium Risk</span><span><i class="risk-dot low"></i>Low Risk</span><span><i class="risk-dot admin"></i>Admin Location</span><span><i class="risk-dot cluster"></i>Hotspot</span></div>
+<div id="map" class="map dash-map"
+    data-records='{{ map_data|tojson }}'
+    data-hotspots='{{ hotspots|tojson }}'
+    data-admin-lat="{{ admin_latitude if admin_latitude is not none else '' }}"
+    data-admin-lng="{{ admin_longitude if admin_longitude is not none else '' }}"
+></div><div id="mapEmpty" class="empty compact" hidden><b>No coordinates available</b></div><div id="mapFilterEmpty" hidden></div><p id="mapLocationStatus" class="map-location-status">Distances are measured from the Admin Office.</p></section>

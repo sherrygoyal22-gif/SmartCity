@@ -1,0 +1,27 @@
+/* Phone / tablet / installed-app behaviour (Android, iPhone, iPad, desktop). */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);overflow-x:hidden}
+img,video,canvas,svg{max-width:100%}
+table{max-width:100%}
+.panel,.table-wrap,.table-scroll{overflow-x:auto}
+@media(max-width:900px){
+  /* 16px inputs stop iPhone Safari from zooming the page on focus */
+  input,select,textarea{font-size:16px!important}
+  .button,button,.admin-sidebar a,.nav-links a{min-height:44px}
+  .admin-content,.content{padding-bottom:calc(40px + env(safe-area-inset-bottom))}
+  .admin-sidebar{padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+  .loc-map{height:320px}
+}
+#cameraVideo{max-width:100%;height:auto;background:#000}
+
+/* install prompt */
+.install-banner{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:500;display:none;align-items:center;gap:12px;max-width:520px;margin:0 auto;padding:12px 14px;border-radius:14px;background:#0b1f4d;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.35);font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.install-banner.show{display:flex}
+.install-banner img{width:40px;height:40px;border-radius:9px;flex:0 0 auto}
+.install-banner .ib-text{flex:1;min-width:0}
+.install-banner .ib-text b{display:block;font-size:15px}
+.install-banner .ib-text span{color:#cfe0f5;font-size:13px}
+.install-banner button{border:0;border-radius:9px;font:700 14px system-ui;cursor:pointer;padding:10px 14px}
+.install-banner .ib-go{background:#22a062;color:#fff}
+.install-banner .ib-x{background:none;color:#cfe0f5;padding:6px 8px;font-size:20px;line-height:1}
+@media all and (display-mode:standalone){.install-banner{display:none!important}}

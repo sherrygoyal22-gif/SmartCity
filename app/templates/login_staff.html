@@ -1,0 +1,24 @@
+{% from '_icons.html' import icon, logo %}<!doctype html><html lang="en"><head><title>Staff Login · SmartCity</title>{% include '_auth_head.html' %}</head>
+<body class="auth-body admin-auth staff-auth"><main class="auth-stage split" style="--auth-bg:url('{{ url_for('static', filename='images/smartcity-hero.jpg') }}')">
+<section class="auth-hero">
+  <div class="auth-hero-brand">{{ logo(54) }}<span><strong>SmartCity</strong><small>AI Garbage Detection</small></span></div>
+  <h2>Cleaner City<br><em>Greener Tomorrow</em></h2>
+  <ul class="auth-features">
+    <li>{{ icon('chip', 22) }}<span>AI Powered Detection</span></li>
+    <li>{{ icon('pin', 22) }}<span>Real-time Reporting</span></li>
+    <li>{{ icon('chart', 22) }}<span>Smart City Management</span></li>
+    <li>{{ icon('leaf', 22) }}<span>Cleaner &amp; Healthier Environment</span></li>
+  </ul>
+</section>
+<section class="auth-card admin-card">
+  <div class="admin-card-head"><span class="shield">{{ icon('clipboard', 30) }}</span><div><h1>Staff Login</h1><p class="auth-sub">Sign in to see the cleaning tasks assigned to you</p></div></div>
+  {% include '_auth_messages.html' %}
+  <form method="post" class="auth-form" novalidate>
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <label class="field"><span class="field-icon">{{ icon('mail', 18) }}</span><input name="identifier" value="{{ identifier }}" placeholder="Enter email or username" autocomplete="username" required autofocus aria-label="Email or username"></label>
+    <label class="field"><span class="field-icon">{{ icon('lock', 18) }}</span><input id="password" type="password" name="password" placeholder="Enter password" autocomplete="current-password" required aria-label="Password"><button type="button" class="field-toggle" data-toggle-password="password" aria-label="Show password">{{ icon('eye', 18) }}</button></label>
+    <div class="auth-row"><label class="check"><input type="checkbox" name="remember"> Remember me</label><span class="auth-hint">Forgot password? Ask the administrator.</span></div>
+    <button class="auth-submit" type="submit">Login</button>
+  </form>
+  <p class="auth-switch">Not municipal staff? <a href="{{ url_for('login') }}">User Login</a> &nbsp;·&nbsp; <a href="{{ url_for('admin_login') }}">Admin Login</a></p>
+</section></main><script src="{{ url_for('static',filename='js/ui.js') }}"></script></body></html>

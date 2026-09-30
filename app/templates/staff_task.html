@@ -1,0 +1,46 @@
+{% extends layout %}{% from '_icons.html' import icon %}
+{% block title %}Task · Case #{{ case['id'] }} · SmartCity{% endblock %}
+{% block content %}
+{% set st = case['status'] %}{% set has_before = case['before_image_path'] %}{% set has_after = case['after_image_path'] %}
+<div class="crumbs"><a href="{{ url_for('staff_dashboard') }}">{{ icon('back', 15) }} My tasks</a></div>
+<section class="panel"><div class="panel-heading"><div><small class="eyebrow">SMARTCITY • CLEANING TASK</small><h2>Case #{{ case['id'] }}</h2></div><div class="actions"><span class="pill {{ st|status_class }}">{{ {'ASSIGNED':'Assigned','CLEANING':'In Progress','COMPLETED':'Cleaned'}.get(st, st) }}</span></div></div>
+<ol class="task-steps"><li class="{{ 'done' if st != 'ASSIGNED' else 'current' }}">1. Assigned</li><li class="{{ 'done' if st == 'COMPLETED' else ('current' if st == 'CLEANING' else '') }}">2. In Progress</li><li class="{{ 'done' if st == 'COMPLETED' else '' }}">3. Cleaned</li></ol>
+<dl class="case-dl task-dl">
+  <div class="cd"><dt>Risk</dt><dd><span class="badge {{ (case['risk_level'] or 'low')|lower }}">{{ case['risk_level'] }}</span> {{ case['risk_score'] }}/100<br><small>{{ case['risk_reason'] }}</small></dd></div>
+  <div class="cd"><dt>Location</dt><dd>{{ case['address'] or 'Address not provided' }}{% if case['latitude'] is not none %}<br><small>{{ case['latitude'] }}, {{ case['longitude'] }}</small>{% endif %}</dd></div>
+  <div class="cd"><dt>Reported</dt><dd>{{ case['created_at']|india_datetime }}</dd></div>
+  <div class="cd"><dt>Admin notes</dt><dd>{{ case['notes'] or 'None' }}</dd></div>
+  {% if case['completed_at'] %}<div class="cd"><dt>Completed</dt><dd>{{ case['completed_at']|india_datetime }} ({{ case['resolution_minutes']|duration }})</dd></div><div class="cd"><dt>Completion notes</dt><dd>{{ case['completion_notes'] }}</dd></div>{% endif %}
+</dl>
+{% if case['latitude'] is not none %}<div class="task-actions"><a class="button" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination={{ case['latitude'] }},{{ case['longitude'] }}&travelmode=driving">{{ icon('map', 17) }} Get directions (from my location)</a><a class="button secondary" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query={{ case['latitude'] }},{{ case['longitude'] }}">{{ icon('pin', 17) }} Open in Google Maps</a></div>{% else %}<p class="hint">No GPS location was shared with this report, so directions are not available. Use the address or contact the administrator.</p>{% endif %}
+</section>
+
+<section class="evidence-grid">
+  <div class="panel result-image"><h2>Reported garbage</h2><p>Photo submitted with the report.</p><img src="{{ url_for('static', filename=case['result_path']) }}" alt="Reported garbage for case {{ case['id'] }}"></div>
+  <div class="panel result-image"><h2>Before cleaning (my photo)</h2>{% if has_before %}<img src="{{ url_for('static', filename=case['before_image_path']) }}" alt="Before cleaning evidence">{% else %}<div class="empty compact"><b>Not uploaded yet</b><p>Take this photo when you arrive, before cleaning.</p></div>{% endif %}</div>
+  <div class="panel result-image"><h2>After cleaning</h2>{% if has_after %}<img src="{{ url_for('static', filename=case['after_image_path']) }}" alt="After cleaning evidence">{% else %}<div class="empty compact"><b>Not uploaded yet</b><p>Take this photo when the place is clean.</p></div>{% endif %}</div>
+</section>
+
+{% if st != 'COMPLETED' %}
+<section class="panel">
+  <h2>Task actions</h2>
+  <div class="wf-step {{ 'active' if st == 'ASSIGNED' else 'locked' }}"><h3>1. Accept &amp; start task{% if st == 'ASSIGNED' %}<span class="wf-badge">Do this now</span>{% else %}<span class="wf-badge locked">Done</span>{% endif %}</h3><p class="hint">Moves the case from Assigned to In Progress.</p>
+    <form method="post" action="{{ url_for('staff_start_task', case_id=case['id']) }}"><fieldset {% if st != 'ASSIGNED' %}disabled{% endif %}><input name="notes" maxlength="1000" placeholder="Note (optional)"><button class="button" type="submit">Accept &amp; start</button></fieldset></form></div>
+  <div class="wf-step {{ 'active' if st == 'CLEANING' and not has_before else 'locked' }}"><h3>2. Upload before-cleaning photo{% if has_before %}<span class="wf-badge locked">Done</span>{% elif st == 'CLEANING' %}<span class="wf-badge">Do this now</span>{% else %}<span class="wf-badge locked">Locked</span>{% endif %}</h3><p class="hint">Evidence of the location before you start cleaning (JPG, PNG or WEBP).</p>
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('staff_before_image', case_id=case['id']) }}"><fieldset {% if st != 'CLEANING' %}disabled{% endif %}><input type="file" name="before_image" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" capture="environment" required><button class="button" type="submit">{{ 'Replace before photo' if has_before else 'Upload before photo' }}</button></fieldset></form></div>
+  <div class="wf-step {{ 'active' if st == 'CLEANING' and has_before and not has_after else 'locked' }}"><h3>3. Upload after-cleaning photo{% if has_after %}<span class="wf-badge locked">Done</span>{% elif st == 'CLEANING' and has_before %}<span class="wf-badge">Do this now</span>{% else %}<span class="wf-badge locked">Locked</span>{% endif %}</h3><p class="hint">Available after the before photo is uploaded.</p>
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('staff_after_image', case_id=case['id']) }}"><fieldset {% if not (st == 'CLEANING' and has_before and not has_after) %}disabled{% endif %}><input type="file" name="after_image" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" capture="environment" required><button class="button" type="submit">Upload after photo</button></fieldset></form></div>
+  <div class="wf-step {{ 'active' if st == 'CLEANING' and has_before and has_after else 'locked' }}"><h3>4. Mark as cleaned{% if st == 'CLEANING' and has_before and has_after %}<span class="wf-badge">Do this now</span>{% else %}<span class="wf-badge locked">Locked</span>{% endif %}</h3><p class="hint">Available after both photos are uploaded. Status becomes Cleaned.</p>
+    <form method="post" action="{{ url_for('staff_complete_task', case_id=case['id']) }}"><fieldset {% if not (st == 'CLEANING' and has_before and has_after) %}disabled{% endif %}><input name="completion_notes" maxlength="1000" required placeholder="What cleaning work was completed?"><button class="button" type="submit">Mark as cleaned</button></fieldset></form></div>
+</section>
+
+<section class="panel"><h2>Cannot clean this location?</h2><p class="hint">Report the problem. The case goes back to the administrator, who will reassign it.</p>
+  <form class="issue-form" method="post" action="{{ url_for('staff_report_issue', case_id=case['id']) }}" data-confirm="Report an issue? This task will be removed from your list and sent back to the administrator.">
+    <select name="reason" required><option value="">Choose a reason</option>{% for r in config['STAFF_ISSUE_REASONS'] %}<option>{{ r }}</option>{% endfor %}</select>
+    <input name="details" maxlength="1000" placeholder="Details (required for “Other”)">
+    <button class="danger" type="submit">{{ icon('alert', 16) }} Report issue</button>
+  </form></section>
+{% endif %}
+
+<section class="panel"><div class="panel-heading"><div><h2>Case activity</h2><p>History of this case.</p></div></div>{% if events %}<div class="activity-list">{% for event in events %}<div class="activity"><div><strong>{{ event['event_type'].replace('_', ' ').title() }}</strong><span>{{ event['message'] }}</span></div><b>{{ event['created_at']|india_datetime }}</b></div>{% endfor %}</div>{% endif %}</section>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends 'base.html' %}{% from '_icons.html' import icon %}
+{% block title %}My Dashboard · SmartCity{% endblock %}
+{% block head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="{{ url_for('static',filename='css/gps-map.css') }}"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>{% endblock %}
+{% block content %}
+<section class="welcome-banner" style="--banner:url('{{ url_for('static', filename='images/smartcity-hero.jpg') }}')"><div><h1>Welcome, {{ current_user['full_name'].split()[0] }}!</h1><p>Help make our city cleaner. Report garbage, track your reports and contribute to a smarter, cleaner city.</p></div><a class="banner-cta" href="{{ url_for('detect') }}">{{ icon('camera', 22) }} Report Garbage <span aria-hidden="true">→</span></a></section>
+
+<section class="stat-cards five">
+  <article class="stat-card"><span class="stat-ico red">{{ icon('trash', 26) }}</span><div><strong>{{ summary['total'] }}</strong><span>My Reports</span></div></article>
+  <article class="stat-card"><span class="stat-ico amber">{{ icon('clock', 26) }}</span><div><strong>{{ summary['pending'] }}</strong><span>Pending</span></div></article>
+  <article class="stat-card"><span class="stat-ico blue">{{ icon('edit', 26) }}</span><div><strong>{{ summary['in_progress'] }}</strong><span>In Progress</span></div></article>
+  <article class="stat-card"><span class="stat-ico green">{{ icon('check', 26) }}</span><div><strong>{{ summary['resolved'] }}</strong><span>Resolved</span></div></article>
+  <article class="stat-card"><span class="stat-ico violet">{{ icon('pin', 26) }}</span><div><strong>{{ summary['locations'] }}</strong><span>Locations</span></div></article>
+</section>
+
+<section class="dash-grid">
+  <section class="panel"><div class="panel-heading"><div><h2>{{ icon('clipboard', 20) }} Recent Reports</h2><p>Your latest submissions and where they stand.</p></div><a href="{{ url_for('my_reports') }}">View All →</a></div>
+  {% if recent %}<div class="report-rows">{% for item in recent %}
+    <article class="report-row"><img src="{{ url_for('static', filename=item['result_path']) }}" alt="Report {{ item['id'] }}">
+      <div class="report-row-main"><div class="report-row-top"><span class="badge {{ (item['case_risk_level'] or 'low')|lower }}">{{ item['case_risk_level'] or 'Not rated' }}</span><b>Report #{{ item['id'] }}</b></div><small>{{ item['created_at']|india_datetime }}</small><small class="loc">{{ icon('pin', 14) }} {{ item['address'] or ('%.4f, %.4f'|format(item['latitude'], item['longitude']) if item['latitude'] is not none else 'Location not shared') }}</small></div>
+      <div class="report-row-side"><span class="pill {{ item['case_status']|status_class }}">{{ item['case_status']|status_group }}</span><a class="button small" href="{{ url_for('report', detection_id=item['id']) }}">View →</a></div></article>{% endfor %}</div>
+  {% else %}<div class="empty"><b>You have not reported anything yet</b><p>Spot garbage? Upload a photo or use your camera and we will pass it to the cleaning team.</p><a class="button" href="{{ url_for('detect') }}">Report Garbage</a></div>{% endif %}
+  </section>
+  {% include '_map_panel.html' %}
+</section>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends 'admin_base.html' %}{% from '_icons.html' import icon %}
+{% block title %}Admin Dashboard · SmartCity{% endblock %}
+{% block head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="{{ url_for('static',filename='css/gps-map.css') }}"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Admin Dashboard</h1><p>Overview of garbage reports, cases and citizens across the city.</p></div><div class="page-actions"><a class="button secondary" href="{{ url_for('export_history') }}">{{ icon('download', 17) }} Export CSV</a><a class="button" href="{{ url_for('cases') }}">{{ icon('clipboard', 17) }} Manage Cases</a></div></div>
+<section class="stat-cards four">
+  <article class="stat-card"><span class="stat-ico red">{{ icon('trash', 26) }}</span><div><strong>{{ summary['total_detections'] }}</strong><span>Total Reports</span><small>{{ summary['today_detections'] }} today</small></div></article>
+  <article class="stat-card"><span class="stat-ico amber">{{ icon('clock', 26) }}</span><div><strong>{{ summary['pending_cases'] }}</strong><span>Pending Cases</span><small>{{ summary['assigned_cases'] + summary['cleaning_cases'] }} in progress</small></div></article>
+  <article class="stat-card"><span class="stat-ico green">{{ icon('check', 26) }}</span><div><strong>{{ summary['completed_cases'] }}</strong><span>Resolved Cases</span><small>{% if summary['average_resolution_minutes'] is not none %}avg {{ summary['average_resolution_minutes']|int|duration }}{% else %}none resolved yet{% endif %}</small></div></article>
+  <article class="stat-card"><span class="stat-ico violet">{{ icon('users', 26) }}</span><div><strong>{{ total_users }}</strong><span>Total Users</span><small>{{ summary['high_risk_cases'] }} high-risk cases</small></div></article>
+</section>
+<section class="dash-grid admin-grid">
+  {% include '_map_panel.html' %}
+  <section class="panel"><div class="panel-heading"><div><h2>{{ icon('list', 20) }} Recent Garbage Reports</h2><p>Latest reports across the city.</p></div><a href="{{ url_for('admin_reports') }}">View All →</a></div>
+  {% if recent %}<div class="report-rows">{% for item in recent %}
+    <article class="report-row"><img src="{{ url_for('static', filename=item['result_path']) }}" alt="Report {{ item['id'] }}">
+      <div class="report-row-main"><div class="report-row-top"><span class="badge {{ (item['case_risk_level'] or 'low')|lower }}">{{ item['case_risk_level'] or 'Not rated' }}</span><b>Report #{{ item['id'] }}</b></div><small>{{ item['created_at']|india_datetime }}{% if item['reporter_name'] %} · {{ item['reporter_name'] }}{% endif %}</small><small class="loc">{{ icon('pin', 14) }} {{ item['address'] or ('%.4f, %.4f'|format(item['latitude'], item['longitude']) if item['latitude'] is not none else 'Location not shared') }}</small></div>
+      <div class="report-row-side"><span class="pill {{ item['case_status']|status_class }}">{{ item['case_status']|status_label }}</span><a class="button small" href="{{ url_for('case_detail', case_id=item['case_id']) if item['case_id'] else url_for('report', detection_id=item['id']) }}">View →</a></div></article>{% endfor %}</div>
+  {% else %}<div class="empty"><b>No reports yet</b><p>Reports from citizens will appear here.</p></div>{% endif %}
+  </section>
+</section>
+{% endblock %}

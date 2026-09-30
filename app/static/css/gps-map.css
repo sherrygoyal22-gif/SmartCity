@@ -1,0 +1,354 @@
+/* ==========================================================
+   MAP / HEADER OVERLAP FIX
+   Leaflet gives its internal panes and controls z-index values
+   up to ~700 (popups even higher), which used to climb above the
+   site's sticky header (z-index:20) during pan/zoom animations.
+   `isolation:isolate` gives the map container its own stacking
+   context, so nothing inside it can ever paint above page-level
+   elements outside it, however high Leaflet sets its own
+   z-indexes. Combined with overflow:hidden + a fixed height this
+   keeps the map fully contained in its card at all times,
+   including while scrolling and resizing.
+   ========================================================== */
+.map,
+#map {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    z-index: 0;
+}
+.leaflet-container {
+    z-index: 0;
+}
+.leaflet-pane,
+.leaflet-top,
+.leaflet-bottom,
+.leaflet-control {
+    z-index: auto;
+}
+.site-header { z-index: 500; }
+
+/* ==========================================================
+   GPS PIN MARKERS (replace the old plain circle dots)
+   ========================================================== */
+.gps-pin {
+    position: relative;
+    width: 30px;
+    height: 40px;
+    display: block;
+    transform: translate(-50%, -100%);
+}
+.gps-pin svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
+.gps-pin.high svg { color: #dc2626; }
+.gps-pin.medium svg { color: #d97706; }
+.gps-pin.low svg { color: #16a34a; }
+
+.gps-dot {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, .45);
+    transform: translate(-50%, -50%);
+}
+.gps-dot.admin { background: #0f172a; }
+
+@keyframes gps-pulse {
+    0% { transform: scale(.6); opacity: .8; }
+    100% { transform: scale(1.9); opacity: 0; }
+}
+
+.gps-cluster {
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    color: #fff;
+    font-weight: 800;
+    font-size: 13px;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+    transform: translate(-50%, -50%);
+}
+.gps-cluster.high { background: #dc262699; }
+.gps-cluster.medium { background: #d9770699; }
+.gps-cluster.low { background: #16a34a99; }
+
+/* ==========================================================
+   LEGEND additions (Admin / Cluster dots)
+   ========================================================== */
+.risk-dot.admin { background: #0f172a; border-radius: 50%; }
+.risk-dot.cluster { background: #dc262699; border-radius: 50%; }
+
+.map-location-status {
+    margin: 8px 2px 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* ==========================================================
+   POPUP CONTENT
+   ========================================================== */
+.map-popup { font-size: 13px; line-height: 1.5; min-width: 210px; }
+.map-popup .map-popup-title { display: block; font-size: 14px; font-weight: 800; }
+.map-popup .map-popup-badge { display: inline-block; border-radius: 99px; padding: 3px 9px; font-size: 10.5px; font-weight: 800; white-space: nowrap; }
+.map-popup .map-popup-badge.high { background: #dc2626; color: #fff; }
+.map-popup .map-popup-badge.medium { background: #f59e0b; color: #fff; }
+.map-popup .map-popup-badge.low { background: #16a34a; color: #fff; }
+.map-popup .map-popup-row { display: block; color: #45524b; margin-bottom: 2px; }
+.map-popup .map-popup-row b { color: #1f2a24; font-weight: 700; }
+.map-popup .map-popup-row.link { color: #1769aa; font-weight: 700; }
+.map-popup .map-popup-dist { display: block; margin-top: 4px; color: #1769aa; font-weight: 700; }
+.map-popup a.map-popup-link { display: inline-block; margin-top: 8px; font-weight: 700; color: #146c43; text-decoration: none; }
+
+/* -- Rich report/hotspot popup card (photo + structured sections) -- */
+.leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 10px 30px rgba(10, 30, 20, .18); }
+.rich-popup-wrap .leaflet-popup-content-wrapper { padding: 0; overflow: hidden; }
+/* Cap total popup height and let the body scroll instead of growing
+   forever: the map card itself is a fixed height (510px desktop /
+   390px mobile) with overflow:hidden, so a popup taller than that can
+   never fully fit, and Leaflet's auto-pan used to try anyway — moving
+   the whole map view sharply toward the bottom of the container to
+   make room. Capping the measured height here keeps that auto-pan
+   small and predictable no matter how much detail a report has. */
+.rich-popup-wrap .leaflet-popup-content { margin: 0 !important; width: 280px !important; max-height: 360px; overflow: hidden; display: flex; flex-direction: column; }
+.map-popup.rich { min-width: 0; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.map-popup-photo-wrap { width: 100%; height: 128px; flex: 0 0 auto; background: #eef3ef; overflow: hidden; }
+.map-popup-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
+.map-popup-body { padding: 12px 14px 13px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.map-popup-headrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+.map-popup-case { display: block; color: #69766f; font-weight: 700; font-size: 12px; margin-bottom: 8px; }
+.map-popup-fields { padding: 9px 0; border-top: 1px dashed #e3e9e5; border-bottom: 1px dashed #e3e9e5; margin-bottom: 9px; font-size: 12.5px; }
+.map-popup-locrow { margin-bottom: 9px; }
+.map-popup-loc-label { display: block; font-weight: 700; font-size: 12.5px; color: #1f2a24; }
+.map-popup-loc-value { display: block; color: #45524b; font-size: 12px; margin: 1px 0 3px; }
+.map-popup-viewmap { font-weight: 700; font-size: 11.5px; color: #146c43; text-decoration: none; }
+.map-popup-viewmap:hover { text-decoration: underline; }
+
+.map-popup-distgrid { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; align-items: center; background: #f5f9f6; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+.map-popup-dist-cell { display: flex; flex-direction: column; }
+.map-popup-dist-cell.full { grid-column: 1 / -1; }
+.map-popup-dist-label { font-size: 11px; font-weight: 700; color: #45524b; }
+.map-popup-dist-value { font-size: 12.5px; font-weight: 800; color: #146c43; }
+.map-popup-dist-value.muted { color: #96a29b; font-weight: 600; font-size: 11px; }
+.map-popup-dir { font-size: 10.5px; font-weight: 800; color: #bd3039; text-align: right; white-space: nowrap; }
+
+.map-popup-breakdown { list-style: none; margin: 6px 0 9px; padding: 0; font-size: 12.5px; display: grid; gap: 4px; }
+.map-popup-breakdown li { display: flex; align-items: center; gap: 7px; color: #33403a; }
+.map-popup-breakdown .risk-dot { width: 9px; height: 9px; flex: 0 0 auto; }
+
+/* ==========================================================
+   RECENT-REPORTS SIDEBAR — clickable rows that re-center the map
+   ========================================================== */
+.hotspot-row { cursor: pointer; align-items: center; }
+.hotspot-row:hover { background: #f7faf8; }
+.hotspot-row .hotspot-view-link { font-size: 12px; color: #146c43; font-weight: 700; text-decoration: none; display: inline-block; margin-top: 4px; }
+.hotspot-row .hotspot-view-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #15803d; color: #fff; font-size: 12px; font-weight: 700;
+    padding: 7px 13px; border-radius: 7px; text-decoration: none; white-space: nowrap;
+}
+.hotspot-row .hotspot-view-btn:hover { background: #146c43; }
+.badge.medium { background: #fff1d8; color: #986000; }
+.badge.low { background: #e8f2ec; color: #146c43; }
+
+/* ==========================================================
+   HOMEPAGE MAP LEGEND (compact variant of .map-legend for the
+   narrower dashboard column)
+   ========================================================== */
+.home-map-legend { flex-wrap: wrap; gap: 6px 14px; font-size: 11.5px; margin: 6px 0 10px; }
+
+/* ==========================================================
+   POPUP ACTION BUTTONS (View Report / View Case / Navigate)
+   ========================================================== */
+.map-popup .map-popup-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.map-popup .map-popup-btn {
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.map-popup .map-popup-btn.primary { background: #146c43; color: #fff; }
+.map-popup .map-popup-btn.case { background: #6d28d9; color: #fff; }
+.map-popup .map-popup-btn.navigate { background: #1769aa; color: #fff; }
+.map-popup .map-popup-btn:hover { filter: brightness(1.08); }
+.hotspot-popup .map-popup-btn.case { background: #e6f0fb; color: #1769aa; }
+
+/* ==========================================================
+   FLOATING DISTANCE LINE TAG (the "2.4 km NE" pill that
+   appears on the dashed line drawn to whichever marker's
+   popup is currently open)
+   ========================================================== */
+.dist-tag {
+    display: inline-block;
+    transform: translate(-50%, -50%);
+    background: #fff;
+    color: #1769aa;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+    padding: 3px 9px;
+    border-radius: 99px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+    border: 1px solid #d9e6f2;
+}
+
+/* ==========================================================
+   "You are here" / "Admin Location" floating name tags
+   ========================================================== */
+.map-place-tag {
+    background: #2563eb;
+    color: #fff;
+    font-weight: 800;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    border: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+}
+.map-place-tag:before { border-top-color: #2563eb !important; }
+.map-place-tag.admin-tag { background: #0f172a; }
+.map-place-tag.admin-tag:before { border-top-color: #0f172a !important; }
+
+/* ==========================================================
+   MAP LEGEND — floating card overlaid on the map (bottom-left)
+   ========================================================== */
+.map-legend-overlay {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 450;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(10, 30, 20, .18);
+    padding: 10px 14px;
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+    color: #33403a;
+    max-width: 190px;
+}
+.map-legend-overlay span { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.map-legend-overlay .risk-dot { width: 10px; height: 10px; flex: 0 0 auto; }
+.map-legend-overlay .risk-dot.admin { background: #0f172a; }
+.map-legend-overlay .risk-dot.cluster { background: #dc2626; }
+@media (max-width: 640px) {
+    .map-legend-overlay { position: static; margin-top: 10px; max-width: none; display: flex; flex-wrap: wrap; gap: 6px 14px; box-shadow: none; border: 1px solid var(--line, #dfe6e1); }
+}
+
+/* ==========================================================
+   "MY LOCATION" MAP CONTROL
+   ========================================================== */
+.map-locate-control {
+    width: 34px;
+    height: 34px;
+    background: #fff;
+    border: none;
+    font-size: 16px;
+    line-height: 34px;
+    text-align: center;
+    cursor: pointer;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+    margin-top: 6px;
+}
+.map-locate-control:hover { background: #f2f7f4; }
+
+/* Match the reference design's rounded, shadowed zoom control */
+.leaflet-touch .leaflet-bar,
+.leaflet-bar {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+    overflow: hidden;
+}
+.leaflet-bar a {
+    width: 34px;
+    height: 34px;
+    line-height: 34px;
+    color: #33403a;
+}
+.leaflet-bar a:first-child { border-radius: 8px 8px 0 0; }
+.leaflet-bar a:last-child { border-radius: 0 0 8px 8px; border-bottom: none; }
+
+/* ==========================================================
+   FULL-SCREEN MAP
+   A CSS-only viewport-covering overlay (see the "Full-screen
+   map toggle" comment in app.js for why this isn't the native
+   Fullscreen API). `body.map-fullscreen-open` stops the page
+   itself from scrolling behind the overlay.
+   ========================================================== */
+body.map-fullscreen-open { overflow: hidden; }
+.map-canvas-wrap.is-map-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    background: #fff;
+    padding: 0;
+    border-radius: 0;
+}
+.map-canvas-wrap.is-map-fullscreen .map,
+.map-canvas-wrap.is-map-fullscreen #map {
+    height: 100% !important;
+    width: 100%;
+    border-radius: 0;
+}
+.map-fullscreen-exit {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 3100;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #0f172a;
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 14px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+}
+.map-fullscreen-exit:hover { background: #1e293b; }
+
+/* ==========================================================
+   MOBILE: keep popups usable on small screens and make the
+   action buttons easy to tap
+   ========================================================== */
+@media (max-width: 520px) {
+    .leaflet-popup-content { margin: 10px 12px; width: 220px !important; }
+    .rich-popup-wrap .leaflet-popup-content { max-height: 280px; }
+    .map-popup { min-width: 0; }
+    .map-popup .map-popup-btn { flex: 1 1 auto; text-align: center; padding: 8px 10px; }
+}
+
+/* ==========================================================
+   REPORT DETAILS CARD (replaces Leaflet popups on the map)
+   ========================================================== */
+.has-info-card-host { position: relative; }
+.map-info-card {
+    position: absolute; top: 58px; right: 12px; z-index: 900;
+    width: 310px; max-width: calc(100% - 24px); max-height: calc(100% - 74px);
+    overflow-y: auto; background: #fff; border-radius: 14px;
+    box-shadow: 0 12px 34px rgba(10, 30, 20, .28);
+}
+.map-info-card[hidden] { display: none; }
+.map-info-card .map-popup.rich { display: block; }
+.map-info-card .map-popup-body { overflow: visible; }
+.map-info-card-close {
+    position: absolute; top: 8px; right: 8px; z-index: 2; width: 28px; height: 28px;
+    border: none; border-radius: 50%; background: rgba(15, 23, 42, .78); color: #fff;
+    font-size: 13px; line-height: 1; cursor: pointer;
+}
+.map-info-card-close:hover { background: #0f172a; }
+.map-info-card .map-popup-photo-wrap { border-radius: 14px 14px 0 0; }
+.map-info-card .hotspot-popup .map-popup-body { padding-top: 16px; }
+@media (max-width: 520px) {
+    .map-info-card { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-width: none; max-height: 62%; }
+}

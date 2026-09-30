@@ -1,0 +1,56 @@
+{% extends layout %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/homepage-final.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map-final.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gps-map.css') }}">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+{% block content %}
+<section class="map-page-hero"><div><small>SMARTCITY • LIVE LOCATION INTELLIGENCE</small><h1>Garbage <em>Hotspot Map</em></h1><p>Explore reported garbage locations and identify areas that need attention.</p><div class="map-values"><span>Cleaner Environment</span><span>Healthier Life</span><span>Better Communities</span></div></div></section>
+
+<section class="map-workspace"><div class="panel map-main">
+    <div class="panel-heading"><div><h2>City Garbage Map</h2><p>Real GPS reports, hotspots and case status.</p></div><a id="mapFullscreenLink" class="map-fullscreen-link" href="{{ url_for('map_view') }}?fullscreen=1">⛶ View Full Screen</a></div>
+    <div class="filters map-filters"><select id="mapStatusFilter"><option value="">All Statuses</option>{% for status in ['PENDING', 'ASSIGNED', 'CLEANING'] %}<option value="{{ status }}">{{ status.title() }}</option>{% endfor %}</select><select id="mapRiskFilter"><option value="">All Risks</option>{% for risk in ['HIGH', 'MEDIUM', 'LOW'] %}<option value="{{ risk }}">{{ risk.title() }}</option>{% endfor %}</select><button id="mapApplyFilters" class="button" type="button">Apply</button><input id="mapSearchFilter" type="search" placeholder="Search location or report ID..." aria-label="Search map locations"></div>
+    <div class="map-canvas-wrap">
+        <div id="map" class="map map-page"
+            data-records='{{ map_data|tojson }}'
+            data-hotspots='{{ hotspots|tojson }}'
+            data-admin-lat="{{ admin_latitude if admin_latitude is not none else '' }}"
+            data-admin-lng="{{ admin_longitude if admin_longitude is not none else '' }}"
+        ></div>
+        <div class="map-legend map-legend-overlay"><span><i class="risk-dot high"></i>High Risk</span><span><i class="risk-dot medium"></i>Medium Risk</span><span><i class="risk-dot low"></i>Low Risk</span><span><i class="risk-dot admin"></i>Admin Location</span><span><i class="risk-dot cluster"></i>Hotspot (Multiple Reports)</span></div>
+    </div>
+    <div id="mapEmpty" class="empty compact" hidden><b>No coordinates to map</b><p>Cleaned areas and images without garbage are not shown on the map.</p></div>
+    <div id="mapFilterEmpty" class="empty compact" hidden><b>No locations match these filters.</b></div>
+    <p id="mapLocationStatus" class="map-location-status">Distances shown below are measured from the Admin Office.</p>
+</div>
+
+<aside class="panel hotspot-list recent-reports-panel">
+    <div class="panel-heading"><h2>Recent Garbage Reports</h2><a href="{{ url_for('history') }}">View All →</a></div>
+    <p class="recent-reports-sub">Latest reported locations across the city.</p>
+    {% for item in map_data[:5] %}
+    <div class="hotspot-row" data-goto-lat="{{ item.lat }}" data-goto-lng="{{ item.lng }}" data-goto-id="{{ item.detection_id }}" role="button" tabindex="0">
+        <img src="{{ url_for('static', filename=item.result_path) }}" alt="Annotated report {{ item.detection_id }}">
+        <div>
+            <div class="hotspot-row-head"><span class="badge {{ (item.risk_level or 'low')|lower }}">{{ item.risk_level or item.case_status or 'Saved' }}</span><b>Report #{{ item.detection_id }}</b><a class="hotspot-view-map" href="#" data-goto-lat="{{ item.lat }}" data-goto-lng="{{ item.lng }}" data-goto-id="{{ item.detection_id }}" title="View on map" aria-label="View report #{{ item.detection_id }} on the map">📍</a></div>
+            <small>📅 {{ item.created_at|india_datetime }}</small>
+            <small>{{ item.source|capitalize if item.source else 'Upload' }} waste</small>
+            <small>📍 {{ item.address or (item.lat ~ ', ' ~ item.lng) }}</small>
+        </div>
+        <a class="hotspot-view-btn" href="{{ item.case_url or item.report_url }}">View →</a>
+    </div>
+    {% else %}
+    <div class="empty compact">No active garbage reports.</div>
+    {% endfor %}
+</aside>
+</section>
+
+<section class="stat-grid city-stats map-stats icon-stats">
+    <article class="stat-risk"><i class="stat-icon high">🗑️</i><span>High Risk</span><strong>{{ map_data|selectattr('risk_level', 'equalto', 'HIGH')|list|length }}</strong><small>Reports</small></article>
+    <article class="stat-pending"><i class="stat-icon pending">🕐</i><span>Pending</span><strong>{{ map_data|selectattr('case_status', 'equalto', 'PENDING')|list|length }}</strong><small>Cases</small></article>
+    <article class="stat-progress"><i class="stat-icon progress">🔄</i><span>In Progress</span><strong>{{ map_data|selectattr('case_status', 'in', ['ASSIGNED', 'CLEANING'])|list|length }}</strong><small>Cases under cleaning</small></article>
+    <article class="stat-completed"><i class="stat-icon resolved">✅</i><span>Resolved</span><strong>{{ summary['completed_cases'] }}</strong><small>Cases</small></article>
+    <article class="stat-total"><i class="stat-icon total">📊</i><span>Total Reports</span><strong>{{ coordinate_count }}</strong><small>Active garbage locations</small></article>
+</section>
+{% endblock %}

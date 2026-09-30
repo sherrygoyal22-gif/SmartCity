@@ -1,0 +1,1 @@
+{% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="auth-alert {{ category }}" role="status">{{ message }}</div>{% endfor %}{% endwith %}{% if error %}<div class="auth-alert error" role="alert">{{ error }}</div>{% endif %}{% for e in (errors or []) %}<div class="auth-alert error" role="alert">{{ e }}</div>{% endfor %}

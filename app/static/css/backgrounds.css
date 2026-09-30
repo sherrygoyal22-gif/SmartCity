@@ -1,0 +1,44 @@
+/* ==========================================================
+   SUBTLE PER-PAGE BACKGROUND SYSTEM
+   Keeps the existing palette/typography/cards untouched; only
+   varies the page-level backdrop so every screen doesn't reuse
+   the same large hero photo. All patterns are CSS gradients /
+   inline SVG data-URIs (no external images, nothing that can
+   go offline), kept low-opacity so text stays fully readable.
+   ========================================================== */
+
+body[data-page="/history"] {
+    background:
+        linear-gradient(180deg, #f7fafc 0%, #f5f7f5 220px, #f5f7f5 100%),
+        repeating-linear-gradient(90deg, #e4ecf0 0 1px, transparent 1px 64px),
+        repeating-linear-gradient(0deg, #e4ecf0 0 1px, transparent 1px 64px);
+    background-attachment: fixed;
+}
+
+body[data-page="/notifications"] {
+    background:
+        radial-gradient(560px 320px at 92% -8%, #fef3c722, transparent 65%),
+        radial-gradient(520px 300px at -6% 12%, #dbeafe33, transparent 60%),
+        var(--bg);
+    background-attachment: fixed;
+}
+
+body[data-page="/map"] {
+    background:
+        linear-gradient(180deg, #f2f7f4 0%, #f5f7f5 260px, #f5f7f5 100%),
+        repeating-linear-gradient(120deg, #d9e6de1a 0 2px, transparent 2px 46px),
+        repeating-linear-gradient(60deg, #d9e6de1a 0 2px, transparent 2px 46px);
+    background-attachment: fixed;
+}
+
+body[data-page="/about"] {
+    background:
+        radial-gradient(640px 360px at 100% 0%, #dcfce744, transparent 60%),
+        radial-gradient(520px 320px at 0% 100%, #d1fae533, transparent 60%),
+        var(--bg);
+    background-attachment: fixed;
+}
+
+@media (max-width: 700px) {
+    body[data-page] { background-attachment: scroll; }
+}
