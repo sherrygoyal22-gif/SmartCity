@@ -6,5 +6,5 @@ opencv-python>=4.8
 numpy>=1.26
 # The bundled YOLO weights were trained with Ultralytics 8.4.x, so the
 # detection engine must be at least that new to load them.
-ultralytics>=8.4.0
+ultralytics==8.4.126
 gunicorn
