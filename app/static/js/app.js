@@ -245,6 +245,14 @@
             button.disabled = true;
             button.textContent = "Analyzing image…";
         }
+
+        if (!document.getElementById("busyOverlay")) {
+            const overlay = document.createElement("div");
+            overlay.id = "busyOverlay";
+            overlay.setAttribute("role", "status");
+            overlay.innerHTML = '<div class="busy-box"><div class="busy-spinner"></div><b>Analysing your photo…</b><span>Please keep this screen open. This can take up to a minute on a phone.</span></div>';
+            document.body.appendChild(overlay);
+        }
     });
 
 
@@ -279,46 +287,37 @@
             "📍 Detecting current location..."
         );
 
+        const useFix = (position, precise) => {
+            latitudeInput.value = position.coords.latitude;
+            longitudeInput.value = position.coords.longitude;
+            updateLocationStatus(
+                precise ? "📍 Location detected (GPS)." : "📍 Location detected."
+            );
+        };
+
+        // 1) quick network/Wi-Fi fix so detection is never kept waiting for satellites,
+        // 2) then a precise GPS fix that replaces it when it arrives.
         navigator.geolocation.getCurrentPosition(
             (position) => {
-
-                const latitude =
-                    position.coords.latitude;
-
-                const longitude =
-                    position.coords.longitude;
-
-                latitudeInput.value = latitude;
-                longitudeInput.value = longitude;
-
-                updateLocationStatus(
-                    "📍 Location detected automatically."
-                );
-
-                console.log(
-                    "SmartCity GPS:",
-                    latitude,
-                    longitude
+                useFix(position, false);
+                navigator.geolocation.getCurrentPosition(
+                    (precise) => useFix(precise, true),
+                    () => {},
+                    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
                 );
             },
-
             (error) => {
-
-                console.warn(
-                    "GPS error:",
-                    error.message
-                );
-
-                updateLocationStatus(
-                    "⚠️ Location unavailable. Detection can continue."
+                console.warn("GPS quick fix failed:", error.message);
+                navigator.geolocation.getCurrentPosition(
+                    (precise) => useFix(precise, true),
+                    (err) => {
+                        console.warn("GPS error:", err.message);
+                        updateLocationStatus("⚠️ Location unavailable. Detection can continue.");
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
                 );
             },
-
-            {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 30000
-            }
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 }
         );
     }
 
@@ -358,16 +357,43 @@
 
             try {
 
-                stream =
-                    await navigator.mediaDevices.getUserMedia({
-                        video: {
-                            facingMode: {
-                                ideal: "environment"
-                            }
-                        },
-                        audio: false
-                    });
+                startCamera.disabled = true;
+                if (cameraStatus) {
+                    cameraStatus.textContent = "Starting camera… allow camera access if asked.";
+                }
 
+                const withTimeout = (promise, ms, message) => Promise.race([
+                    promise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
+                ]);
+
+                try {
+                    stream = await withTimeout(
+                        navigator.mediaDevices.getUserMedia({
+                            video: {
+                                facingMode: { ideal: "environment" },
+                                width: { ideal: 1280 },
+                                height: { ideal: 720 }
+                            },
+                            audio: false
+                        }),
+                        20000,
+                        "Camera did not respond."
+                    );
+                } catch (firstError) {
+                    // Some phones reject the size/facing hints: retry with the simplest request.
+                    if (firstError && firstError.name === "NotAllowedError") {
+                        throw firstError;
+                    }
+                    stream = await withTimeout(
+                        navigator.mediaDevices.getUserMedia({ video: true, audio: false }),
+                        20000,
+                        "Camera did not respond."
+                    );
+                }
+
+                video.muted = true;
+                video.setAttribute("playsinline", "");
                 video.srcObject = stream;
                 video.hidden = false;
 
@@ -375,7 +401,7 @@
                     cameraFallback.hidden = true;
                 }
 
-                await video.play();
+                await withTimeout(video.play(), 10000, "Camera preview did not start.");
 
                 startCamera.disabled = true;
                 stopCamera.disabled = false;
@@ -395,9 +421,15 @@
 
                 console.error(error);
 
+                stream?.getTracks().forEach((track) => track.stop());
+                stream = null;
+                startCamera.disabled = false;
+
                 if (cameraStatus) {
                     cameraStatus.textContent =
-                        "Camera permission was denied or no camera is available.";
+                        (error && error.name === "NotAllowedError")
+                            ? "Camera permission was denied. Allow camera access in the browser/site settings, or use “Take photo with phone camera” below."
+                            : "Camera could not start (" + ((error && error.message) || "unknown error") + "). Use “Take photo with phone camera” below instead.";
                 }
             }
         }
@@ -449,17 +481,23 @@
 
             try {
 
-                const canvas = $("#cameraCanvas");
+                if (!video.videoWidth || !video.videoHeight) {
+                    throw new Error("Camera is not ready yet. Wait a second and try again.");
+                }
 
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+                // Shrink frames before upload. The detector works at 640 px, so full
+                // phone-camera resolution only makes the upload slow.
+                const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
+                const canvas = $("#cameraCanvas");
+                canvas.width = Math.round(video.videoWidth * scale);
+                canvas.height = Math.round(video.videoHeight * scale);
 
                 const context =
                     canvas.getContext("2d");
 
                 if (cameraStatus) {
                     cameraStatus.textContent =
-                        "Confirming garbage across camera frames…";
+                        "Hold steady… capturing frames (1/4)";
                 }
 
                 captureCamera.disabled = true;
@@ -476,9 +514,9 @@
                 }
 
                 const captureFrame = async () => {
-                    context.drawImage(video, 0, 0);
+                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
                     return new Promise((resolve) => {
-                        canvas.toBlob(resolve, "image/jpeg", 0.90);
+                        canvas.toBlob(resolve, "image/jpeg", 0.8);
                     });
                 };
 
@@ -489,8 +527,12 @@
                         throw new Error("Camera frame could not be captured.");
                     }
                     frames.push(frame);
+                    if (cameraStatus) {
+                        cameraStatus.textContent =
+                            "Hold steady… capturing frames (" + Math.min(index + 2, 4) + "/4)";
+                    }
                     if (index < 3) {
-                        await new Promise((resolve) => setTimeout(resolve, 700));
+                        await new Promise((resolve) => setTimeout(resolve, 350));
                     }
                 }
 
@@ -530,17 +572,40 @@
                     $("#address")?.value || ""
                 );
 
-                const response =
-                    await fetch(
+                if (cameraStatus) {
+                    cameraStatus.textContent =
+                        "Uploading and analysing… this can take up to a minute on a phone connection.";
+                }
+
+                const controller = new AbortController();
+                const abortTimer = setTimeout(() => controller.abort(), 120000);
+                let response;
+                try {
+                    response = await fetch(
                         "/api/camera-detect",
                         {
                             method: "POST",
-                            body: formData
+                            body: formData,
+                            signal: controller.signal
                         }
                     );
+                } finally {
+                    clearTimeout(abortTimer);
+                }
 
-                const data =
-                    await response.json();
+                let data;
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    data = {
+                        ok: false,
+                        error: response.status === 401 || response.redirected
+                            ? "Your session expired. Log in again."
+                            : response.status === 413
+                                ? "The photo is too large to upload."
+                                : "The server returned an unexpected response (" + response.status + "). Try again in a moment."
+                    };
+                }
 
                 captureCamera.disabled = false;
 
@@ -634,7 +699,9 @@
 
                 if (cameraStatus) {
                     cameraStatus.textContent =
-                        "An error occurred while sending the detection.";
+                        (error && error.name === "AbortError")
+                            ? "The server took too long to answer. Check your connection and try again, or use “Take photo with phone camera”."
+                            : ((error && error.message) || "An error occurred while sending the detection.");
                 }
             }
         }
@@ -1226,3 +1293,74 @@
     }
 
 })();
+
+/* Shrink big phone photos in the browser before uploading (a 6 MB photo becomes ~300 KB),
+   then submit. Used by the file picker and by the "Take photo with phone camera" button. */
+document.addEventListener("DOMContentLoaded", () => {
+    const uploadForm = document.getElementById("uploadForm");
+    const fileInput = document.getElementById("image");
+    const nativeInput = document.getElementById("nativeCapture");
+    if (!uploadForm || !fileInput) return;
+
+    const status = () => document.getElementById("cameraStatus");
+    let pending = null;
+
+    const downscale = (file) => new Promise((resolve) => {
+        const okType = ["image/jpeg", "image/png", "image/webp"].includes(file && file.type);
+        if (!file || !file.type.startsWith("image/") || (okType && file.size < 1_200_000)) { resolve(file); return; }
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.round(img.naturalWidth * scale);
+                canvas.height = Math.round(img.naturalHeight * scale);
+                canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => {
+                    URL.revokeObjectURL(url);
+                    if (!blob || (okType && blob.size >= file.size)) { resolve(file); return; }
+                    resolve(new File([blob], (file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }));
+                }, "image/jpeg", 0.85);
+            } catch (error) { URL.revokeObjectURL(url); resolve(file); }
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+        img.src = url;
+    });
+
+    const setFile = (file) => {
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        fileInput.files = transfer.files;
+    };
+
+    fileInput.addEventListener("change", () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        pending = downscale(file).then((small) => {
+            if (small !== file) { try { setFile(small); } catch (error) { /* keep original */ } }
+        }).finally(() => { pending = null; });
+    });
+
+    // If the user taps submit while a photo is still being shrunk, wait for it.
+    uploadForm.addEventListener("submit", (event) => {
+        if (!pending) return;
+        event.preventDefault();
+        pending.then(() => (uploadForm.requestSubmit ? uploadForm.requestSubmit() : uploadForm.submit()));
+    });
+
+    if (nativeInput) {
+        nativeInput.addEventListener("change", async () => {
+            const file = nativeInput.files && nativeInput.files[0];
+            if (!file) return;
+            if (status()) status().textContent = "Photo taken. Preparing…";
+            const small = await downscale(file);
+            try {
+                setFile(small);
+                fileInput.dispatchEvent(new Event("input", { bubbles: true }));
+            } catch (error) { return; }
+            if (status()) status().textContent = "Uploading and analysing…";
+            if (uploadForm.requestSubmit) uploadForm.requestSubmit(); else uploadForm.submit();
+        });
+    }
+});
