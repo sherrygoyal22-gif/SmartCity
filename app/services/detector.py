@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,6 +38,24 @@ class DetectionResult:
     largest_box_ratio: float | None = None
 
 
+def _limit_threads() -> None:
+    """Keep PyTorch/OpenCV to a few threads (see wsgi.py): much faster on small hosted CPUs."""
+    try:
+        count = max(1, int(os.environ.get("SMARTCITY_TORCH_THREADS", "2")))
+    except ValueError:
+        count = 2
+    try:
+        import torch
+
+        torch.set_num_threads(count)
+    except Exception:
+        pass
+    try:
+        cv2.setNumThreads(count)
+    except Exception:
+        pass
+
+
 class GarbageDetector:
     """Lazy YOLO loader that renders one enclosing garbage box per image."""
 
@@ -53,6 +73,11 @@ class GarbageDetector:
         )
         self._model = None
         self.active_model_path = None
+        # One request at a time inside the model: the start-up warm-up and a user's
+        # first request must not both load it (doubles memory), and concurrent
+        # predict() calls on one model are not safe.
+        self._lock = threading.RLock()
+        self.last_inference_ms = None
         # False-positive guard: only boxes whose predicted class name matches
         # one of these (case-insensitive) are treated as real garbage.
         # None/empty means "accept every class" (unchanged legacy behaviour),
@@ -70,6 +95,10 @@ class GarbageDetector:
         return self.active_model_path
 
     def _load_model(self):
+        with self._lock:
+            return self._load_model_locked()
+
+    def _load_model_locked(self):
         if self._model is None:
             candidates = [self.model_path]
             if self.fallback_model_path and self.fallback_model_path != self.model_path:
@@ -95,6 +124,9 @@ class GarbageDetector:
                     log.exception("Could not load model %s", candidate)
                     errors.append(exc)
 
+            if self._model is not None:
+                _limit_threads()
+
             if self._model is None:
                 missing = [str(e) for e in errors if isinstance(e, FileNotFoundError)]
                 if len(missing) == len(errors) and errors:
@@ -107,6 +139,7 @@ class GarbageDetector:
 
     def detect(self, image_path: Path, result_path: Path, confidence: float, image_size: int):
         image = self._normalise_image(cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED))
+        image = self._limit_size(image)
         result, detections = self._inspect_image(image, confidence, image_size)
 
         if detections:
@@ -120,7 +153,7 @@ class GarbageDetector:
             top = max(y1 - height - baseline - 8, 0)
             cv2.rectangle(image, (x1, top), (x1 + width + 10, top + height + baseline + 8), (22, 163, 74), -1)
             cv2.putText(image, label, (x1 + 5, top + height + 2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
-        if not cv2.imwrite(str(result_path), image):
+        if not cv2.imwrite(str(result_path), image, [cv2.IMWRITE_JPEG_QUALITY, 85]):
             raise DetectionError("The processed image could not be saved.")
         return result
 
@@ -132,6 +165,16 @@ class GarbageDetector:
         )
         result, _ = self._inspect_image(image, confidence, image_size)
         return result
+
+    @staticmethod
+    def _limit_size(image, longest_side: int = 1600):
+        """Shrink huge phone photos: the model works at 640 px, so more pixels only slow everything down."""
+        height, width = image.shape[:2]
+        largest = max(height, width)
+        if largest <= longest_side:
+            return image
+        scale = longest_side / largest
+        return cv2.resize(image, (round(width * scale), round(height * scale)), interpolation=cv2.INTER_AREA)
 
     @staticmethod
     def _normalise_image(image, error_message="The uploaded file is not a valid image."):
@@ -155,7 +198,10 @@ class GarbageDetector:
 
     def _inspect_image(self, image, confidence: float, image_size: int):
         try:
-            prediction = self._load_model().predict(source=image, conf=confidence, imgsz=image_size, verbose=False)[0]
+            with self._lock:
+                started = time.perf_counter()
+                prediction = self._load_model().predict(source=image, conf=confidence, imgsz=image_size, verbose=False)[0]
+                self.last_inference_ms = round((time.perf_counter() - started) * 1000)
         except DetectionError:
             raise
         except Exception as exc:
