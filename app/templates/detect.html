@@ -34,7 +34,7 @@
                 id="image"
                 name="image"
                 type="file"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                accept="image/*"
                 required
             >
 
@@ -172,6 +172,13 @@
             Capture & Detect
         </button>
 
+    </div>
+
+
+    <div class="native-camera">
+        <label class="button secondary" for="nativeCapture">Take photo with phone camera</label>
+        <input id="nativeCapture" type="file" accept="image/*" capture="environment" hidden>
+        <small>Opens your phone's own camera app, then runs the same detection and saves a report.</small>
     </div>
 
 
