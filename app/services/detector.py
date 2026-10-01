@@ -216,7 +216,14 @@ class GarbageDetector:
         try:
             with self._lock:
                 started = time.perf_counter()
-                prediction = self._load_model().predict(source=image, conf=confidence, imgsz=image_size, verbose=False)[0]
+                prediction = self._load_model().predict(
+    source=image,
+    conf=confidence,
+    imgsz=320,
+    verbose=False,
+    device="cpu",
+    half=False,
+)[0]
                 self.last_inference_ms = round((time.perf_counter() - started) * 1000)
         except DetectionError:
             raise
