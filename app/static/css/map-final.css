@@ -1,4 +1,4 @@
-.map-page-hero{min-height:216px;margin:-20px -20px 16px;padding:34px 58% 28px 42px;border-radius:0 0 12px 12px;background:linear-gradient(90deg,rgba(255,255,255,.96),rgba(255,255,255,.68) 45%,rgba(255,255,255,.06)),url('/static/images/smartcity-hero.png') center 53%/cover;box-shadow:0 8px 24px rgba(6,78,59,.08)}
+.map-page-hero{min-height:216px;margin:-20px -20px 16px;padding:34px 58% 28px 42px;border-radius:0 0 12px 12px;background:linear-gradient(90deg,rgba(255,255,255,.96),rgba(255,255,255,.68) 45%,rgba(255,255,255,.06)),url('/static/images/smartcity-hero-wide.jpg') center 53%/cover;box-shadow:0 8px 24px rgba(6,78,59,.08)}
 .map-page-hero small{color:#15803d;font-weight:800;letter-spacing:.07em}
 .map-page-hero h1{margin:6px 0;font-size:clamp(34px,4vw,54px);line-height:1;color:#082750}
 .map-page-hero h1 em{color:#087b42;font-style:normal}
@@ -53,7 +53,7 @@
   .hotspot-row img{width:54px;height:48px}
 }
 @media(max-width:580px){
-  .map-page-hero{margin:-20px -14px 14px;padding:28px 22px 170px;background:linear-gradient(180deg,rgba(255,255,255,.97),rgba(255,255,255,.78) 52%,rgba(255,255,255,.14)),url('/static/images/smartcity-hero.png') 64% center/cover}
+  .map-page-hero{margin:-20px -14px 14px;padding:28px 22px 170px;background:linear-gradient(180deg,rgba(255,255,255,.97),rgba(255,255,255,.78) 52%,rgba(255,255,255,.14)),url('/static/images/smartcity-hero-wide.jpg') 64% center/cover}
   .map-page-hero p{font-size:14px}
   .map-values{gap:10px;font-size:11px}
   .map-stats{grid-template-columns:repeat(2,1fr)}
