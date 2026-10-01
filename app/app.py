@@ -358,7 +358,7 @@ def create_app(test_config=None):
 
     # Load the model in the background right after start-up so the first
     # camera detection does not also pay for loading it (slow on a hosted CPU).
-    if os.environ.get("SMARTCITY_WARMUP", "1") != "0" and not test_config:
+if os.environ.get("SMARTCITY_WARMUP", "0" if os.environ.get("RENDER") else "1") != "0" and not test_config:
         import threading
 
         def _warm_up():

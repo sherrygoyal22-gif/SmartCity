@@ -110,7 +110,7 @@ def main() -> None:
     if "--reset-admin" not in sys.argv:
         ensure_dependencies()
 
-    from app.app import app  # creates / upgrades the database on import
+    from app.main import app  # creates / upgrades the database on import
 
     if "--reset-admin" in sys.argv:
         reset_admin(app)

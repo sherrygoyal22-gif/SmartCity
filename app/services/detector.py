@@ -15,12 +15,28 @@ import numpy as np
 # model fail to load on some machines. Must be set before torch is imported.
 os.environ.setdefault("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
 
-try:
-    from ultralytics import YOLO
-    _IMPORT_ERROR = None
-except Exception as _exc:  # missing / broken install: report it clearly later
-    YOLO = None
-    _IMPORT_ERROR = _exc
+# ultralytics (and therefore PyTorch) is imported lazily, the first time the model is
+# needed. Importing it at start-up costs a few hundred MB of RAM, which crashes small
+# hosted instances (512 MB) before anyone has even logged in.
+YOLO = None
+_IMPORT_ERROR = None
+_import_lock = threading.Lock()
+
+
+def _import_yolo():
+    """Import ultralytics on first use; returns YOLO or None (error kept in _IMPORT_ERROR)."""
+    global YOLO, _IMPORT_ERROR
+    if YOLO is not None:
+        return YOLO
+    with _import_lock:
+        if YOLO is None:
+            try:
+                from ultralytics import YOLO as _YOLO
+                YOLO = _YOLO
+                _IMPORT_ERROR = None
+            except Exception as exc:  # missing / broken install: report it clearly later
+                _IMPORT_ERROR = exc
+    return YOLO
 
 log = logging.getLogger("smartcity.detector")
 
@@ -104,7 +120,7 @@ class GarbageDetector:
             if self.fallback_model_path and self.fallback_model_path != self.model_path:
                 candidates.append(self.fallback_model_path)
 
-            if YOLO is None:
+            if _import_yolo() is None:
                 log.error("ultralytics could not be imported: %r", _IMPORT_ERROR)
                 raise DetectionError(
                     "The detection engine (ultralytics) is not installed correctly. "
