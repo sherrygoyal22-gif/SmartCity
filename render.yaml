@@ -4,9 +4,9 @@ services:
   - type: web
     name: smartcity-garbage-detection
     runtime: python
-    plan: starter            # the YOLO model needs ~1 GB RAM; the free 512 MB plan will run out
+    plan: standard           # 2 GB RAM. The YOLO model will not fit in the 512 MB Free / Starter plans
     buildCommand: pip install -r requirements-deploy.txt
-    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 180
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 180 --worker-tmp-dir /dev/shm
     healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
@@ -15,6 +15,8 @@ services:
         generateValue: true
       - key: SMARTCITY_BEHIND_PROXY
         value: "1"
+      - key: SMARTCITY_ADMIN_PASSWORD   # you type this in Render once; it becomes the admin password
+        sync: false
       - key: SMARTCITY_DATA_DIR      # database + uploaded photos live on the disk below
         value: /var/data
     disk:                    # survives redeploys, so reports and cases are kept
