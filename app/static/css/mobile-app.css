@@ -25,3 +25,14 @@ table{max-width:100%}
 .install-banner .ib-go{background:#22a062;color:#fff}
 .install-banner .ib-x{background:none;color:#cfe0f5;padding:6px 8px;font-size:20px;line-height:1}
 @media all and (display-mode:standalone){.install-banner{display:none!important}}
+
+.native-camera{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.native-camera .button{text-align:center;cursor:pointer}
+.native-camera small{color:#667085}
+.camera-controls{display:flex;flex-wrap:wrap;gap:8px}
+
+#busyOverlay{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:rgba(11,31,77,.72);padding:24px}
+#busyOverlay .busy-box{background:#fff;color:#0b1f4d;border-radius:16px;padding:26px 22px;max-width:340px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+#busyOverlay .busy-box span{color:#566;font-size:14px;line-height:1.4}
+#busyOverlay .busy-spinner{width:44px;height:44px;border-radius:50%;border:5px solid #d7e3f7;border-top-color:#198754;animation:busyspin .9s linear infinite}
+@keyframes busyspin{to{transform:rotate(360deg)}}
