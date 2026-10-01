@@ -47,6 +47,7 @@ class GarbageDetector:
         self._onnx_session = None
         self._onnx_input_name = None
         self._onnx_output_name = None
+        self._input_size = 640
 
         self.active_model_path = None
 
@@ -163,6 +164,16 @@ class GarbageDetector:
 
                 self._onnx_input_name = (
                     inputs[0].name
+                )
+
+                # Use whatever square size the ONNX file was exported at
+                # (320, 640, ...) so the app never mismatches the model.
+                shape = inputs[0].shape
+                self._input_size = (
+                    int(shape[2])
+                    if len(shape) == 4
+                    and isinstance(shape[2], int)
+                    else 640
                 )
 
                 self._onnx_output_name = (
@@ -468,46 +479,62 @@ class GarbageDetector:
         image_size: int,
     ):
         """
-        Convert OpenCV BGR image to ONNX format:
+        Letterbox the BGR image to [1, 3, S, S] float32 RGB 0..1.
 
-            [1, 3, 320, 320]
-
-        The exported model expects float32 RGB
-        values normalized to 0..1.
+        The aspect ratio is kept and the borders are padded with grey
+        (114), exactly like Ultralytics does, so the model sees objects
+        the same way it did during training.
         """
+        height, width = image.shape[:2]
+
+        ratio = min(
+            image_size / float(height),
+            image_size / float(width),
+        )
+
+        new_w = max(1, int(round(width * ratio)))
+        new_h = max(1, int(round(height * ratio)))
 
         resized = cv2.resize(
             image,
-            (
-                image_size,
-                image_size,
-            ),
+            (new_w, new_h),
             interpolation=cv2.INTER_LINEAR,
         )
 
-        rgb = cv2.cvtColor(
+        pad_w = (image_size - new_w) / 2.0
+        pad_h = (image_size - new_h) / 2.0
+
+        top = int(round(pad_h - 0.1))
+        bottom = int(round(pad_h + 0.1))
+        left = int(round(pad_w - 0.1))
+        right = int(round(pad_w + 0.1))
+
+        padded = cv2.copyMakeBorder(
             resized,
+            top,
+            bottom,
+            left,
+            right,
+            cv2.BORDER_CONSTANT,
+            value=(114, 114, 114),
+        )
+
+        rgb = cv2.cvtColor(
+            padded,
             cv2.COLOR_BGR2RGB,
         )
 
-        tensor = (
-            rgb.astype(np.float32)
-            / 255.0
-        )
+        tensor = rgb.astype(np.float32) / 255.0
+        tensor = np.transpose(tensor, (2, 0, 1))
+        tensor = np.expand_dims(tensor, axis=0)
 
-        tensor = np.transpose(
-            tensor,
-            (2, 0, 1),
-        )
-
-        tensor = np.expand_dims(
-            tensor,
-            axis=0,
-        )
-
-        return np.ascontiguousarray(
-            tensor,
-            dtype=np.float32,
+        return (
+            np.ascontiguousarray(
+                tensor,
+                dtype=np.float32,
+            ),
+            ratio,
+            (left, top),
         )
 
     # ============================================================
@@ -533,6 +560,8 @@ class GarbageDetector:
         original_height,
         image_size,
         confidence,
+        ratio=None,
+        pad=(0, 0),
     ):
         """
         Decode exported YOLO output.
@@ -580,15 +609,13 @@ class GarbageDetector:
                 f"{output.shape}"
             )
 
-        scale_x = (
-            original_width
-            / float(image_size)
-        )
+        if ratio is None:
+            ratio = min(
+                image_size / float(original_height),
+                image_size / float(original_width),
+            )
 
-        scale_y = (
-            original_height
-            / float(image_size)
-        )
+        pad_x, pad_y = pad
 
         boxes = []
         scores = []
@@ -617,20 +644,20 @@ class GarbageDetector:
                 continue
 
             x1 = (
-                cx - width / 2.0
-            ) * scale_x
+                cx - width / 2.0 - pad_x
+            ) / ratio
 
             y1 = (
-                cy - height / 2.0
-            ) * scale_y
+                cy - height / 2.0 - pad_y
+            ) / ratio
 
             x2 = (
-                cx + width / 2.0
-            ) * scale_x
+                cx + width / 2.0 - pad_x
+            ) / ratio
 
             y2 = (
-                cy + height / 2.0
-            ) * scale_y
+                cy + height / 2.0 - pad_y
+            ) / ratio
 
             x1 = max(
                 0,
@@ -758,11 +785,12 @@ class GarbageDetector:
 
                 session = self._load_model()
 
-                # ONNX model was exported at 320x320.
-                input_tensor = (
+                size = self._input_size
+
+                input_tensor, ratio, pad = (
                     self._prepare_input(
                         image,
-                        320,
+                        size,
                     )
                 )
 
@@ -783,8 +811,10 @@ class GarbageDetector:
                         prediction,
                         image.shape[1],
                         image.shape[0],
-                        320,
+                        size,
                         confidence,
+                        ratio,
+                        pad,
                     )
                 )
 
