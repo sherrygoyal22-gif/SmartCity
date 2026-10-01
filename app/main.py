@@ -206,7 +206,7 @@ def create_app(test_config=None):
 
         # Browser camera frames must persist at this confidence before a
         # single report is saved. Image uploads retain the V4 0.25 default.
-        CAMERA_FRAME_CONFIDENCE=45.0,
+        CAMERA_FRAME_CONFIDENCE=55.0,
 
         CAMERA_CONFIRMATION_FRAMES=4,
 
@@ -218,7 +218,7 @@ def create_app(test_config=None):
         # noise blob or a sliver of a shadow can no longer count as a
         # "confirmed" frame; real garbage in a live camera view is almost
         # always well above this.
-        CAMERA_MIN_BOX_AREA_RATIO=0.01,
+        CAMERA_MIN_BOX_AREA_RATIO=0.02,
 
         # Only YOLO boxes whose class name matches one of these (case
         # insensitive) are accepted as garbage. This is a second, independent
@@ -1239,8 +1239,8 @@ def create_app(test_config=None):
         try:
 
             confidence = float(request.form.get("confidence", app.config["DETECTION_CONFIDENCE"]))
-            # Live camera never runs below 0.30 even if the slider is lower.
-            confidence = min(max(confidence, 0.30), 0.99)
+            # Live camera never runs below 0.40 even if the slider is lower.
+            confidence = min(max(confidence, 0.40), 0.99)
             frames = request.files.getlist("validation_frames")
             required_frames = app.config["CAMERA_CONFIRMATION_FRAMES"]
             if len(frames) < required_frames:
