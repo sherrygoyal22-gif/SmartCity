@@ -41,6 +41,9 @@ class FrameScan:
     boxes: tuple
     sharpness: float
     zoomed: bool = False
+    # Picture quality, used to say "possible garbage, not clear enough".
+    brightness: float = 128.0     # 0 (black) .. 255 (white)
+    blur_fraction: float = 0.0    # share of the picture that has no detail (0..1)
 
 
 class GarbageDetector:
@@ -859,6 +862,33 @@ class GarbageDetector:
             )
         return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
+    @staticmethod
+    def quality(image) -> tuple[float, float, float]:
+        """(sharpness, brightness, blur_fraction) of a frame, measured on a small copy.
+
+        ``blur_fraction`` is the share of a 4x4 grid with almost no detail, so a
+        finger over part of the lens or a half-out-of-focus picture is caught
+        even when the rest of the frame is crisp.
+        """
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        height, width = gray.shape[:2]
+        scale = 480.0 / max(height, width)
+        if scale < 1.0:
+            gray = cv2.resize(
+                gray,
+                (max(1, round(width * scale)), max(1, round(height * scale))),
+                interpolation=cv2.INTER_AREA,
+            )
+        lap = cv2.Laplacian(gray, cv2.CV_64F)
+        rows, cols = gray.shape[:2]
+        flat = 0
+        for i in range(4):
+            for j in range(4):
+                cell = lap[i * rows // 4:(i + 1) * rows // 4, j * cols // 4:(j + 1) * cols // 4]
+                if cell.size and float(cell.var()) < 20.0:
+                    flat += 1
+        return float(lap.var()), float(gray.mean()), flat / 16.0
+
     def scan_frame(
         self,
         image_bytes: bytes,
@@ -909,10 +939,13 @@ class GarbageDetector:
             )
             for item in detections
         )
+        sharp, bright, blur_fraction = self.quality(image)
         return FrameScan(
             boxes=boxes,
-            sharpness=self.sharpness(image),
+            sharpness=sharp,
             zoomed=zoomed,
+            brightness=bright,
+            blur_fraction=blur_fraction,
         )
 
     def _zoom_detections_locked(self, image, confidence: float):

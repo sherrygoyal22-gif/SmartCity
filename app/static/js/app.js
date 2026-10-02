@@ -611,23 +611,54 @@
                         "Analysing… please keep this screen open.";
                 }
 
-                const controller = new AbortController();
-                const abortTimer = setTimeout(() => controller.abort(), 45000);
-                let response;
-                try {
-                    response = await fetch(
-                        "/api/camera-detect",
-                        {
-                            method: "POST",
-                            body: formData,
-                            signal: controller.signal
+                /*
+                   The hosting proxy answers 502 / 503 / 504 (an HTML page, not JSON)
+                   when the server is busy, waking up or restarting. That is not a
+                   detection result, so quietly retry instead of showing an error.
+                */
+                const TRANSIENT = [502, 503, 504];
+                const MAX_TRIES = 3;
+                let response = null;
+                let data = null;
+
+                for (let attempt = 1; attempt <= MAX_TRIES; attempt += 1) {
+                    const controller = new AbortController();
+                    const abortTimer = setTimeout(() => controller.abort(), 45000);
+                    response = null;
+                    try {
+                        response = await fetch(
+                            "/api/camera-detect",
+                            {
+                                method: "POST",
+                                body: formData,
+                                signal: controller.signal
+                            }
+                        );
+                    } catch (networkError) {
+                        // Timeout / dropped connection: treat like a busy server.
+                        if (attempt === MAX_TRIES) {
+                            throw networkError;
                         }
-                    );
-                } finally {
-                    clearTimeout(abortTimer);
+                    } finally {
+                        clearTimeout(abortTimer);
+                    }
+
+                    if (response && !TRANSIENT.includes(response.status)) {
+                        break;
+                    }
+                    if (attempt < MAX_TRIES) {
+                        if (cameraStatus) {
+                            cameraStatus.textContent =
+                                "Server is busy… analysing again (" + (attempt + 1) + "/" + MAX_TRIES + ")";
+                        }
+                        await new Promise((resolve) => setTimeout(resolve, 2500 * attempt));
+                    }
                 }
 
-                let data;
+                if (!response) {
+                    throw new Error("The server is not reachable. Check your connection and try again.");
+                }
+
                 try {
                     data = await response.json();
                 } catch (parseError) {
@@ -637,7 +668,7 @@
                             ? "Your session expired. Log in again."
                             : response.status === 413
                                 ? "The photo is too large to upload."
-                                : "The server returned an unexpected response (" + response.status + "). Try again in a moment."
+                                : "The server is busy right now. Please press Capture & Detect again in a few seconds."
                     };
                 }
 

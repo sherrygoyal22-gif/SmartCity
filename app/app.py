@@ -1327,6 +1327,7 @@ def create_app(test_config=None):
             detector = app.extensions["detector"]
             scans = []
             candidate_frames = 0
+            started = time.monotonic()
             for position, frame in enumerate(frames):
                 scan = detector.scan_frame(
                     frame.read(),
@@ -1352,6 +1353,19 @@ def create_app(test_config=None):
                     position + 1, candidate_frames, len(frames), live
                 ):
                     break
+                # Garbage already confirmed by the frames so far: no need to
+                # analyse the rest (saves a full detection pass).
+                if (
+                    position + 1 >= live.min_support
+                    and position + 1 < len(frames)
+                    and camera_gate.decide_scene(scans, live).is_garbage
+                ):
+                    break
+                # Time budget: answer with what we have instead of letting the
+                # request run into the host's timeout (that is what shows as 502).
+                if time.monotonic() - started > live.time_budget:
+                    app.logger.warning("camera budget reached after %s frame(s)", position + 1)
+                    break
 
             verdict = camera_gate.decide_scene(scans, live)
             app.logger.info(
@@ -1362,11 +1376,13 @@ def create_app(test_config=None):
                 None if verdict.box_ratio is None else round(verdict.box_ratio, 3),
             )
             if not verdict.is_garbage:
-                # A normal, firm answer (clean / too blurry), not an error.
+                # A normal, firm answer (clean / possible garbage / too blurry), not an error.
                 return {
                     "ok": False,
                     "verdict": verdict.state,
                     "error": verdict.message,
+                    "possible": verdict.state == "possible",
+                    "best_confidence": round(verdict.best_confidence, 1),
                 }, 200
 
             # ------------------------------------
@@ -1378,7 +1394,7 @@ def create_app(test_config=None):
             record_id = detect_upload(
                 best_frame,
                 "camera",
-                deep=True,
+                deep=(time.monotonic() - started) < live.time_budget * 0.6,
                 min_confidence=live.floor,
             )
 

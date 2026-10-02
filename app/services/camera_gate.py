@@ -48,6 +48,16 @@ class LiveSettings:
     # SMARTCITY_LIVE_MIN_SHARPNESS (e.g. 6) if you want it.
     min_sharpness: float = 0.0
     max_frames: int = 3          # frames analysed per press
+    # "Possible garbage, not clear enough": only when the model saw something at
+    # least this confident (percent) AND the picture is blurry / dark / washed out.
+    # Clean, sharp pictures never get this answer.
+    possible_conf: float = 40.0
+    poor_sharpness: float = 60.0   # whole-frame sharpness below this = blurry
+    poor_blur_fraction: float = 0.35  # share of the frame with no detail
+    poor_dark: float = 50.0        # average brightness below this = too dark
+    poor_bright: float = 225.0     # average brightness above this = washed out
+    # Wall-clock limit (seconds) for analysing one press.
+    time_budget: float = 22.0
 
     def tightened(self, slider_percent: float) -> "LiveSettings":
         """The on-page confidence slider can make the camera stricter, never blind."""
@@ -89,12 +99,18 @@ def settings_from_env() -> LiveSettings:
         min_overlap=number("SMARTCITY_LIVE_OVERLAP", d.min_overlap),
         min_sharpness=number("SMARTCITY_LIVE_MIN_SHARPNESS", d.min_sharpness),
         max_frames=number("SMARTCITY_LIVE_FRAMES", d.max_frames, int),
+        possible_conf=number("SMARTCITY_LIVE_POSSIBLE_CONF", d.possible_conf),
+        poor_sharpness=number("SMARTCITY_LIVE_POOR_SHARPNESS", d.poor_sharpness),
+        poor_blur_fraction=number("SMARTCITY_LIVE_POOR_BLUR_FRACTION", d.poor_blur_fraction),
+        poor_dark=number("SMARTCITY_LIVE_POOR_DARK", d.poor_dark),
+        poor_bright=number("SMARTCITY_LIVE_POOR_BRIGHT", d.poor_bright),
+        time_budget=number("SMARTCITY_LIVE_BUDGET", d.time_budget),
     )
 
 
 @dataclass(frozen=True)
 class SceneVerdict:
-    state: str                      # "garbage" | "clean" | "blurry"
+    state: str                      # "garbage" | "possible" | "clean" | "blurry"
     message: str
     anchor_index: int | None = None  # frame that shows the garbage best
     support: int = 0
@@ -114,6 +130,24 @@ BLURRY_MESSAGE = (
     "The picture is too blurry to check. Hold the phone steady, "
     "let it focus for a second and press Capture again."
 )
+
+
+def poor_quality(scan, settings: LiveSettings) -> str:
+    """Why a frame is hard to judge ("" when it is fine): blurry, dark or washed out."""
+    if scan.brightness < settings.poor_dark:
+        return "dark"
+    if scan.brightness > settings.poor_bright:
+        return "washed out"
+    if scan.sharpness < settings.poor_sharpness or scan.blur_fraction >= settings.poor_blur_fraction:
+        return "blurry"
+    return ""
+
+
+def possible_message(percent: float) -> str:
+    return (
+        f"Possible garbage ({percent:.0f}% at best) but not clear enough. "
+        "Move closer, improve the light and hold the camera steady."
+    )
 
 
 def _area(box) -> float:
@@ -220,6 +254,22 @@ def decide_scene(scans, settings: LiveSettings) -> SceneVerdict:
             box_ratio=box_area,
             rule=rule,
         )
+
+    # Nothing confirmed. If the model did see something garbage-like but the
+    # picture is blurry / dark / washed out, say "possible garbage" with the
+    # percentage so the user retakes it. A clean, sharp picture never gets here.
+    if best_overall >= settings.possible_conf:
+        top_scan = max(
+            scans,
+            key=lambda scan: max((box[4] for box in scan.boxes), default=0.0),
+        )
+        reason = poor_quality(top_scan, settings)
+        if reason:
+            return verdict(
+                "possible",
+                possible_message(best_overall),
+                rule="possible-" + reason,
+            )
 
     # Nothing confirmed. If nothing at all was seen AND the picture is mush,
     # say so instead of claiming the area is clean.
