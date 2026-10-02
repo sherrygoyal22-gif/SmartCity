@@ -250,7 +250,7 @@
             const overlay = document.createElement("div");
             overlay.id = "busyOverlay";
             overlay.setAttribute("role", "status");
-            overlay.innerHTML = '<div class="busy-box"><div class="busy-spinner"></div><b>Analysing your photo…</b><span>Please keep this screen open. This can take up to a minute on a phone.</span></div>';
+            overlay.innerHTML = '<div class="busy-box"><div class="busy-spinner"></div><b>Analysing your photo…</b><span>Please keep this screen open.</span></div>';
             document.body.appendChild(overlay);
         }
     });
@@ -485,9 +485,12 @@
                     throw new Error("Camera is not ready yet. Wait a second and try again.");
                 }
 
-                // Shrink frames before upload. The detector works at 640 px, so full
-                // phone-camera resolution only makes the upload slow.
-                const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
+                // Take a short burst and keep only the sharpest frames. A phone camera
+                // needs a moment to focus and hand shake blurs single frames, so picking
+                // the sharpest few is what lets small / far-away garbage be seen.
+                const BURST_FRAMES = 6;
+                const KEEP_FRAMES = 3;
+                const scale = Math.min(1, 1024 / Math.max(video.videoWidth, video.videoHeight));
                 const canvas = $("#cameraCanvas");
                 canvas.width = Math.round(video.videoWidth * scale);
                 canvas.height = Math.round(video.videoHeight * scale);
@@ -495,9 +498,46 @@
                 const context =
                     canvas.getContext("2d");
 
+                // Small scratch canvas used only to measure how sharp a frame is.
+                const probe = document.createElement("canvas");
+                const probeContext = probe.getContext("2d", { willReadFrequently: true });
+                const sharpnessOf = (source) => {
+                    const pw = 160;
+                    const ph = Math.max(8, Math.round(pw * source.height / source.width));
+                    probe.width = pw;
+                    probe.height = ph;
+                    probeContext.drawImage(source, 0, 0, pw, ph);
+                    const px = probeContext.getImageData(0, 0, pw, ph).data;
+                    const gray = new Float32Array(pw * ph);
+                    for (let i = 0; i < gray.length; i += 1) {
+                        gray[i] = 0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2];
+                    }
+                    let sum = 0;
+                    let sumSquares = 0;
+                    let count = 0;
+                    for (let y = 1; y < ph - 1; y += 1) {
+                        for (let x = 1; x < pw - 1; x += 1) {
+                            const i = y * pw + x;
+                            const lap = gray[i - 1] + gray[i + 1] + gray[i - pw] + gray[i + pw] - 4 * gray[i];
+                            sum += lap;
+                            sumSquares += lap * lap;
+                            count += 1;
+                        }
+                    }
+                    const mean = sum / count;
+                    return sumSquares / count - mean * mean;
+                };
+
+                // Forget the previous answer so an old result never sits under a new one.
+                const previousResult = $("#cameraResult");
+                if (previousResult) {
+                    previousResult.hidden = true;
+                    previousResult.innerHTML = "";
+                }
+
                 if (cameraStatus) {
                     cameraStatus.textContent =
-                        "Hold steady… capturing frames (1/4)";
+                        "Hold steady… capturing (1/" + BURST_FRAMES + ")";
                 }
 
                 captureCamera.disabled = true;
@@ -513,40 +553,34 @@
                     getAutomaticLocation();
                 }
 
-                const captureFrame = async () => {
+                const captured = [];
+                for (let index = 0; index < BURST_FRAMES; index += 1) {
                     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    return new Promise((resolve) => {
-                        canvas.toBlob(resolve, "image/jpeg", 0.8);
+                    const score = sharpnessOf(canvas);
+                    const blob = await new Promise((resolve) => {
+                        canvas.toBlob(resolve, "image/jpeg", 0.88);
                     });
-                };
-
-                const frames = [];
-                for (let index = 0; index < 4; index += 1) {
-                    const frame = await captureFrame();
-                    if (!frame) {
+                    if (!blob) {
                         throw new Error("Camera frame could not be captured.");
                     }
-                    frames.push(frame);
+                    captured.push({ blob, score });
                     if (cameraStatus) {
                         cameraStatus.textContent =
-                            "Hold steady… capturing frames (" + Math.min(index + 2, 4) + "/4)";
+                            "Hold steady… capturing (" + Math.min(index + 2, BURST_FRAMES) + "/" + BURST_FRAMES + ")";
                     }
-                    if (index < 3) {
-                        await new Promise((resolve) => setTimeout(resolve, 350));
+                    if (index < BURST_FRAMES - 1) {
+                        await new Promise((resolve) => setTimeout(resolve, 200));
                     }
                 }
+
+                captured.sort((a, b) => b.score - a.score);
+                const frames = captured.slice(0, KEEP_FRAMES).map((item) => item.blob);
 
                 const formData =
                     new FormData();
 
-                formData.append(
-                    "image",
-                    frames[frames.length - 1],
-                    "camera.jpg"
-                );
-
                 frames.forEach((frame, index) => {
-                    formData.append("validation_frames", frame, `camera-confirm-${index}.jpg`);
+                    formData.append("validation_frames", frame, `camera-${index}.jpg`);
                 });
 
                 formData.append(
@@ -574,7 +608,7 @@
 
                 if (cameraStatus) {
                     cameraStatus.textContent =
-                        "Uploading and analysing… this can take up to a minute on a phone connection.";
+                        "Analysing… please keep this screen open.";
                 }
 
                 const controller = new AbortController();
