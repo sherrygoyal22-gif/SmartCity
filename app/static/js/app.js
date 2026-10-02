@@ -488,9 +488,9 @@
                 // Take a short burst and keep only the sharpest frames. A phone camera
                 // needs a moment to focus and hand shake blurs single frames, so picking
                 // the sharpest few is what lets small / far-away garbage be seen.
-                const BURST_FRAMES = 6;
+                const BURST_FRAMES = 3;
                 const KEEP_FRAMES = 3;
-                const scale = Math.min(1, 1024 / Math.max(video.videoWidth, video.videoHeight));
+                const scale = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight));
                 const canvas = $("#cameraCanvas");
                 canvas.width = Math.round(video.videoWidth * scale);
                 canvas.height = Math.round(video.videoHeight * scale);
@@ -558,7 +558,7 @@
                     context.drawImage(video, 0, 0, canvas.width, canvas.height);
                     const score = sharpnessOf(canvas);
                     const blob = await new Promise((resolve) => {
-                        canvas.toBlob(resolve, "image/jpeg", 0.88);
+                        canvas.toBlob(resolve, "image/jpeg", 0.7);
                     });
                     if (!blob) {
                         throw new Error("Camera frame could not be captured.");
@@ -569,7 +569,7 @@
                             "Hold steady… capturing (" + Math.min(index + 2, BURST_FRAMES) + "/" + BURST_FRAMES + ")";
                     }
                     if (index < BURST_FRAMES - 1) {
-                        await new Promise((resolve) => setTimeout(resolve, 200));
+                        await new Promise((resolve) => setTimeout(resolve, 120));
                     }
                 }
 
@@ -612,7 +612,7 @@
                 }
 
                 const controller = new AbortController();
-                const abortTimer = setTimeout(() => controller.abort(), 120000);
+                const abortTimer = setTimeout(() => controller.abort(), 45000);
                 let response;
                 try {
                     response = await fetch(
