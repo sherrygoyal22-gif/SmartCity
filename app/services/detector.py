@@ -25,6 +25,9 @@ class DetectionResult:
     highest_confidence: float | None
     box_area_ratio: float | None
     largest_box_ratio: float | None = None
+    # Enclosing box of all detections, normalised 0..1 (x1, y1, x2, y2).
+    # Used by the live camera to check detections stay in the same place.
+    enclosing_box: tuple[float, float, float, float] | None = None
 
 
 class GarbageDetector:
@@ -846,6 +849,7 @@ class GarbageDetector:
 
         box_area_ratio = None
         largest_box_ratio = None
+        enclosing_box = None
 
         if detections:
 
@@ -912,6 +916,13 @@ class GarbageDetector:
                 for item in detections
             )
 
+            enclosing_box = (
+                x1 / image_width,
+                y1 / image_height,
+                x2 / image_width,
+                y2 / image_height,
+            )
+
         else:
             average_confidence = None
 
@@ -937,6 +948,7 @@ class GarbageDetector:
             largest_box_ratio=(
                 largest_box_ratio
             ),
+            enclosing_box=enclosing_box,
         )
 
         return result, detections

@@ -35,6 +35,7 @@ from app.auth import admin_required, login_required, staff_required, user_requir
 
 from app.database import db
 from app.services.detector import DetectionError, GarbageDetector
+from app.services import camera_gate
 from app.services import geocode
 from app.services.location import hotspot_clusters, optional_coordinates
 from app.services.reports import detections_csv
@@ -204,21 +205,34 @@ def create_app(test_config=None):
 
         DETECTION_CONFIDENCE=0.25,
 
-        # Browser camera frames must persist at this confidence before a
-        # single report is saved. Image uploads retain the V4 0.25 default.
-        CAMERA_FRAME_CONFIDENCE=55.0,
+        # ---- Live camera confirmation (see app/services/camera_gate.py) ----
+        # The old rule needed EVERY frame >= 55-60% confidence, which real
+        # camera frames (blur, exposure, video compression) almost never reach,
+        # so live detection always answered "clean". Frames are now judged
+        # together. All values can be tuned on Render without a code change.
+        #
+        # Lowest confidence the model is asked to report for camera frames.
+        CAMERA_DETECTION_FLOOR=float(os.environ.get("SMARTCITY_CAMERA_FLOOR", "0.35")),
 
+        # A single frame counts as a "hit" at or above this confidence (%).
+        # Raising the on-page confidence slider makes this stricter.
+        CAMERA_HIT_CONFIDENCE=float(os.environ.get("SMARTCITY_CAMERA_HIT_CONF", "45")),
+
+        # Frames captured per camera press, and how many must be hits.
         CAMERA_CONFIRMATION_FRAMES=4,
+        CAMERA_MIN_HITS=int(os.environ.get("SMARTCITY_CAMERA_MIN_HITS", "3")),
 
-        # Of those frames, how many must show garbage. All 4 must agree so a
-        # static empty scene that fools the model once is rejected.
-        CAMERA_MIN_CONFIRMED_FRAMES=3,
+        # The hit frames must also average at least this confidence (%).
+        # This is the main guard that stops clean scenes being reported.
+        CAMERA_MIN_MEAN_CONFIDENCE=float(os.environ.get("SMARTCITY_CAMERA_MEAN_CONF", "50")),
 
-        # Raised from 0.002 (0.2% of the frame) to 0.01 (1%) so a stray
-        # noise blob or a sliver of a shadow can no longer count as a
-        # "confirmed" frame; real garbage in a live camera view is almost
-        # always well above this.
-        CAMERA_MIN_BOX_AREA_RATIO=0.02,
+        # A box must cover at least 2% of the frame; stray blobs and slivers
+        # of shadow are ignored.
+        CAMERA_MIN_BOX_AREA_RATIO=float(os.environ.get("SMARTCITY_CAMERA_MIN_AREA", "0.02")),
+
+        # Hit frames must show the garbage in the same part of the view
+        # (overlap of their enclosing boxes, 0-1).
+        CAMERA_MIN_FRAME_OVERLAP=float(os.environ.get("SMARTCITY_CAMERA_OVERLAP", "0.25")),
 
         # Only YOLO boxes whose class name matches one of these (case
         # insensitive) are accepted as garbage. This is a second, independent
@@ -1238,37 +1252,59 @@ def create_app(test_config=None):
 
         try:
 
-            confidence = float(request.form.get("confidence", app.config["DETECTION_CONFIDENCE"]))
-            # Live camera never runs below 0.40 even if the slider is lower.
-            confidence = min(max(confidence, 0.40), 0.99)
+            slider = float(request.form.get("confidence", app.config["DETECTION_CONFIDENCE"]))
+            # The model is asked for everything down to the camera floor; the
+            # confirmation rules below decide what is accepted. Raising the
+            # slider makes the camera stricter, it can never make it blind.
+            confidence = min(max(slider, app.config["CAMERA_DETECTION_FLOOR"]), 0.99)
+            hit_confidence = max(app.config["CAMERA_HIT_CONFIDENCE"], slider * 100.0)
+            min_area = app.config["CAMERA_MIN_BOX_AREA_RATIO"]
+            min_hits = app.config["CAMERA_MIN_HITS"]
+
             frames = request.files.getlist("validation_frames")
             required_frames = app.config["CAMERA_CONFIRMATION_FRAMES"]
             if len(frames) < required_frames:
                 raise ValueError("Capture enough camera frames to confirm a garbage detection.")
 
-            confirmed_frames = 0
-            for frame in frames[:required_frames]:
+            inspections = []
+            checked_frames = frames[:required_frames]
+            for position, frame in enumerate(checked_frames):
                 inspection = app.extensions["detector"].inspect_bytes(
                     frame.read(), confidence, app.config["DETECTION_IMAGE_SIZE"]
                 )
+                inspections.append(inspection)
                 app.logger.info(
-                    "camera frame: boxes=%s highest_conf=%s largest_box=%s",
+                    "camera frame %s: boxes=%s highest_conf=%s largest_box=%s",
+                    position + 1,
                     inspection.detection_count,
                     inspection.highest_confidence,
                     inspection.largest_box_ratio,
                 )
-                if (
-                    inspection.detection_count
-                    and inspection.highest_confidence is not None
-                    and inspection.highest_confidence >= app.config["CAMERA_FRAME_CONFIDENCE"]
-                    and (inspection.largest_box_ratio or 0) >= app.config["CAMERA_MIN_BOX_AREA_RATIO"]
-                ):
-                    confirmed_frames += 1
-
-            if confirmed_frames < app.config["CAMERA_MIN_CONFIRMED_FRAMES"]:
-                raise ValueError(
-                    "Garbage was not confirmed across multiple camera frames. No report was saved."
+                # Stop early once confirmation is impossible (saves CPU on a
+                # hosted server): an obviously empty scene needs one model run.
+                hits_so_far = sum(
+                    1 for item in inspections
+                    if camera_gate.frame_is_hit(item, hit_confidence, min_area)
                 )
+                remaining = len(checked_frames) - position - 1
+                if hits_so_far + remaining < min_hits:
+                    break
+
+            verdict = camera_gate.evaluate_camera_frames(
+                inspections,
+                hit_confidence=hit_confidence,
+                min_hits=min_hits,
+                min_mean_confidence=app.config["CAMERA_MIN_MEAN_CONFIDENCE"],
+                min_box_ratio=min_area,
+                min_overlap=app.config["CAMERA_MIN_FRAME_OVERLAP"],
+            )
+            app.logger.info(
+                "camera verdict: confirmed=%s hits=%s/%s best=%.1f mean_hit=%s reason=%s",
+                verdict.confirmed, verdict.hits, verdict.frames,
+                verdict.best_confidence, verdict.mean_hit_confidence, verdict.reason,
+            )
+            if not verdict.confirmed:
+                raise ValueError(verdict.reason)
 
             # ------------------------------------
             # Run detection
