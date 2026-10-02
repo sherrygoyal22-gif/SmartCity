@@ -1,18 +1,14 @@
-# Python
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
+
 venv/
 .venv/
 env/
-.vscode/
-dataset/
 
-# Runtime data. Never commit these: they belong to the running site, and a
-# committed copy is what a restart or redeploy puts back (new reports vanish).
-app/database/*.db
+.vscode/
+
 app/database/backups/
-app/database/.secret_key
-app/static/uploads/*
-app/static/results/*
-!app/static/uploads/.gitkeep
-!app/static/results/.gitkeep
+
+*.db
+*.log
