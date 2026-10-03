@@ -10,6 +10,11 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 
+try:
+    from ultralytics import YOLO
+except ImportError:
+    YOLO = None
+
 
 log = logging.getLogger("smartcity.detector")
 
@@ -51,6 +56,17 @@ class GarbageDetector:
         self._onnx_input_name = None
         self._onnx_output_name = None
         self._input_size = 640
+
+        # Optional clean-scene classifier used only as a conservative
+        # second-stage false-positive filter. It does NOT replace the
+        # existing garbage detector.
+        self._clean_model = None
+        self._clean_model_path = (
+            self.model_path.parent / "clean_scene_best.pt"
+        )
+        self._clean_filter_enabled = True
+        self._clean_filter_threshold = 0.95
+        self._clean_filter_max_garbage_confidence = 50.0
 
         self.active_model_path = None
 
@@ -220,6 +236,128 @@ class GarbageDetector:
             "could not be loaded. Expected one of: "
             + ", ".join(expected)
         ) from last_error
+
+    # ============================================================
+    # CLEAN-SCENE FALSE-POSITIVE FILTER
+    # ============================================================
+
+    def _load_clean_model(self):
+        """Lazily load the optional clean-scene classifier.
+
+        The clean model is intentionally a second-stage filter. The original
+        ONNX garbage detector remains the source of garbage detections.
+        """
+        if not self._clean_filter_enabled:
+            return None
+
+        if self._clean_model is not None:
+            return self._clean_model
+
+        if YOLO is None:
+            log.warning(
+                "Ultralytics is unavailable; clean-scene filter disabled."
+            )
+            return None
+
+        if not self._clean_model_path.is_file():
+            log.warning(
+                "Clean-scene model not found: %s. Filter disabled.",
+                self._clean_model_path,
+            )
+            return None
+
+        try:
+            log.info(
+                "Loading clean-scene classifier: %s",
+                self._clean_model_path,
+            )
+            self._clean_model = YOLO(
+                str(self._clean_model_path)
+            )
+            return self._clean_model
+        except Exception:
+            log.exception(
+                "Could not load clean-scene classifier; filter disabled."
+            )
+            self._clean_model = None
+            return None
+
+    def _looks_strongly_clean(self, image):
+        """Return True only for a very strong clean-scene prediction."""
+        model = self._load_clean_model()
+        if model is None:
+            return False
+
+        try:
+            results = model.predict(
+                source=image,
+                imgsz=224,
+                verbose=False,
+                device="cpu",
+            )
+
+            if not results:
+                return False
+
+            result = results[0]
+            probs = getattr(result, "probs", None)
+            if probs is None:
+                return False
+
+            top1 = int(probs.top1)
+            top1_conf = float(probs.top1conf)
+            names = getattr(result, "names", {}) or {}
+            class_name = str(
+                names.get(top1, top1)
+            ).strip().lower()
+
+            is_clean_class = class_name in {
+                "clean",
+                "clean_scene",
+                "clean scene",
+            }
+
+            log.info(
+                "Clean filter: class=%s confidence=%.3f",
+                class_name,
+                top1_conf,
+            )
+
+            return (
+                is_clean_class
+                and top1_conf >= self._clean_filter_threshold
+            )
+        except Exception:
+            # Never allow the optional filter to break detection.
+            log.exception(
+                "Clean-scene classifier failed; keeping garbage detection."
+            )
+            return False
+
+    def _apply_clean_filter(self, image, detections):
+        """Suppress only low-confidence detections on strongly clean scenes."""
+        if not detections:
+            return detections
+
+        highest = max(
+            float(item[4])
+            for item in detections
+        )
+
+        # Protect clear/strong garbage detections. The clean-only classifier
+        # must never override a strong garbage detection.
+        if highest > self._clean_filter_max_garbage_confidence:
+            return detections
+
+        if self._looks_strongly_clean(image):
+            log.info(
+                "Suppressing %d low-confidence garbage detection(s) "
+                "because the scene is strongly classified as clean.",
+                len(detections),
+            )
+            return []
+
+        return detections
 
     # ============================================================
     # IMAGE DETECTION
@@ -819,6 +957,14 @@ class GarbageDetector:
                         ratio,
                         pad,
                     )
+                )
+
+                # Optional second-stage clean-scene filter. It only suppresses
+                # weak garbage detections when the clean classifier is highly
+                # confident, while preserving strong garbage detections.
+                detections = self._apply_clean_filter(
+                    image,
+                    detections,
                 )
 
                 self.last_inference_ms = round(
