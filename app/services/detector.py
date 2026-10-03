@@ -30,22 +30,6 @@ class DetectionResult:
     enclosing_box: tuple[float, float, float, float] | None = None
 
 
-@dataclass(frozen=True)
-class FrameScan:
-    """Everything the live camera needs to know about one frame.
-
-    ``boxes`` are (x1, y1, x2, y2, confidence_percent) with the corners
-    normalised to 0..1 so frames of any size can be compared.
-    """
-
-    boxes: tuple
-    sharpness: float
-    zoomed: bool = False
-    # Picture quality, used to say "possible garbage, not clear enough".
-    brightness: float = 128.0     # 0 (black) .. 255 (white)
-    blur_fraction: float = 0.0    # share of the picture that has no detail (0..1)
-
-
 class GarbageDetector:
     """Lightweight ONNX garbage detector for local and hosted CPU deployment."""
 
@@ -247,7 +231,6 @@ class GarbageDetector:
         result_path: Path,
         confidence: float,
         image_size: int,
-        deep: bool = False,
     ):
         image = self._normalise_image(
             cv2.imread(
@@ -262,7 +245,6 @@ class GarbageDetector:
             image,
             confidence,
             image_size,
-            deep=deep,
         )
 
         # --------------------------------------------------------
@@ -789,171 +771,6 @@ class GarbageDetector:
         return detections
 
     # ============================================================
-    # ZOOM PASSES (small / far-away garbage)
-    # ============================================================
-    #
-    # The network sees a 640 px square. A phone frame that is 1024 px wide
-    # is shrunk to ~60 %, so garbage that is far away becomes a few pixels
-    # and is missed. Two overlapping crops that each cover 60 % of the long
-    # side are enlarged to ~100 %, which makes distant items about 1.6x
-    # bigger for the model without any new training.
-
-    @staticmethod
-    def _zoom_tiles(image, fraction: float = 0.6):
-        height, width = image.shape[:2]
-        if width >= height:
-            tile = int(round(width * fraction))
-            return [(0, 0, tile, height), (width - tile, 0, width, height)]
-        tile = int(round(height * fraction))
-        return [(0, 0, width, tile), (0, height - tile, width, height)]
-
-    def _zoom_detections(self, image, confidence: float):
-        found = []
-        size = self._input_size
-        for x1, y1, x2, y2 in self._zoom_tiles(image):
-            tile = image[y1:y2, x1:x2]
-            tensor, ratio, pad = self._prepare_input(tile, size)
-            output = self._onnx_session.run(
-                [self._onnx_output_name],
-                {self._onnx_input_name: tensor},
-            )[0]
-            for a, b, c, d, score in self._decode_predictions(
-                output,
-                tile.shape[1],
-                tile.shape[0],
-                size,
-                confidence,
-                ratio,
-                pad,
-            ):
-                found.append((a + x1, b + y1, c + x1, d + y1, score))
-        return found
-
-    @staticmethod
-    def _merge_detections(detections, iou_threshold: float = 0.45):
-        """Non-maximum suppression across the full-frame and zoomed passes."""
-        if len(detections) < 2:
-            return list(detections)
-        boxes = [
-            [int(x1), int(y1), int(x2 - x1), int(y2 - y1)]
-            for x1, y1, x2, y2, _ in detections
-        ]
-        scores = [float(item[4]) / 100.0 for item in detections]
-        keep = cv2.dnn.NMSBoxes(boxes, scores, 0.0, float(iou_threshold))
-        if keep is None or len(keep) == 0:
-            return list(detections)
-        return [detections[int(i)] for i in np.asarray(keep).reshape(-1)]
-
-    # ============================================================
-    # CAMERA FRAME SCAN
-    # ============================================================
-
-    @staticmethod
-    def sharpness(image) -> float:
-        """Variance of the Laplacian: low = blurry, high = crisp."""
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        height, width = gray.shape[:2]
-        scale = 480.0 / max(height, width)
-        if scale < 1.0:
-            gray = cv2.resize(
-                gray,
-                (max(1, round(width * scale)), max(1, round(height * scale))),
-                interpolation=cv2.INTER_AREA,
-            )
-        return float(cv2.Laplacian(gray, cv2.CV_64F).var())
-
-    @staticmethod
-    def quality(image) -> tuple[float, float, float]:
-        """(sharpness, brightness, blur_fraction) of a frame, measured on a small copy.
-
-        ``blur_fraction`` is the share of a 4x4 grid with almost no detail, so a
-        finger over part of the lens or a half-out-of-focus picture is caught
-        even when the rest of the frame is crisp.
-        """
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        height, width = gray.shape[:2]
-        scale = 480.0 / max(height, width)
-        if scale < 1.0:
-            gray = cv2.resize(
-                gray,
-                (max(1, round(width * scale)), max(1, round(height * scale))),
-                interpolation=cv2.INTER_AREA,
-            )
-        lap = cv2.Laplacian(gray, cv2.CV_64F)
-        rows, cols = gray.shape[:2]
-        flat = 0
-        for i in range(4):
-            for j in range(4):
-                cell = lap[i * rows // 4:(i + 1) * rows // 4, j * cols // 4:(j + 1) * cols // 4]
-                if cell.size and float(cell.var()) < 20.0:
-                    flat += 1
-        return float(lap.var()), float(gray.mean()), flat / 16.0
-
-    def scan_frame(
-        self,
-        image_bytes: bytes,
-        confidence: float,
-        image_size: int,
-        solid_percent: float = 60.0,
-        solid_area: float = 0.04,
-    ) -> FrameScan:
-        """Detect on one camera frame.
-
-        The normal full-frame pass always runs. The two zoom passes are added
-        only when that pass found nothing solid (a large, confident box),
-        because that is exactly when small / far / blurry garbage hides.
-        """
-        image = self._limit_size(
-            self._normalise_image(
-                cv2.imdecode(
-                    np.frombuffer(image_bytes, dtype=np.uint8),
-                    cv2.IMREAD_UNCHANGED,
-                ),
-                error_message="A camera frame is not a valid image.",
-            )
-        )
-        height, width = image.shape[:2]
-        total = float(width * height)
-
-        _, detections = self._inspect_image(image, confidence, image_size)
-        zoomed = False
-        solid = any(
-            item[4] >= solid_percent
-            and (item[2] - item[0]) * (item[3] - item[1]) / total >= solid_area
-            for item in detections
-        )
-        if not solid:
-            detections = self._merge_detections(
-                list(detections)
-                + self._zoom_detections_locked(image, confidence)
-            )
-            zoomed = True
-
-        boxes = tuple(
-            (
-                item[0] / width,
-                item[1] / height,
-                item[2] / width,
-                item[3] / height,
-                float(item[4]),
-            )
-            for item in detections
-        )
-        sharp, bright, blur_fraction = self.quality(image)
-        return FrameScan(
-            boxes=boxes,
-            sharpness=sharp,
-            zoomed=zoomed,
-            brightness=bright,
-            blur_fraction=blur_fraction,
-        )
-
-    def _zoom_detections_locked(self, image, confidence: float):
-        with self._lock:
-            self._load_model()
-            return self._zoom_detections(image, confidence)
-
-    # ============================================================
     # MAIN INFERENCE
     # ============================================================
 
@@ -962,7 +779,6 @@ class GarbageDetector:
         image,
         confidence: float,
         image_size: int,
-        deep: bool = False,
     ):
         try:
 
@@ -1004,12 +820,6 @@ class GarbageDetector:
                         pad,
                     )
                 )
-
-                if deep:
-                    detections = self._merge_detections(
-                        list(detections)
-                        + self._zoom_detections(image, confidence)
-                    )
 
                 self.last_inference_ms = round(
                     (
