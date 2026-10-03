@@ -205,7 +205,11 @@ def create_app(test_config=None):
             else (BASE_DIR / "database" / "smartcity.db")
         ),
 
-        DETECTION_CONFIDENCE=0.25,
+        DETECTION_CONFIDENCE=0.30,
+
+        # Lowest confidence an uploaded image is ever analysed at, whatever the
+        # slider says. Tunable on Render with SMARTCITY_UPLOAD_MIN_CONF.
+        UPLOAD_MIN_CONFIDENCE=float(os.environ.get("SMARTCITY_UPLOAD_MIN_CONF", "0.30")),
 
         # ---- Live camera confirmation (see app/services/camera_gate.py) ----
         # The old rule needed EVERY frame >= 55-60% confidence, which real
@@ -790,10 +794,13 @@ def create_app(test_config=None):
                 ]
 
 
+            # Never run below the upload floor: boxes under ~30% are mostly
+            # textures (walls, grass, shadows), not garbage. A very low slider
+            # value used to make clean photos look like garbage.
             confidence = min(
                 max(
                     confidence,
-                    0.01,
+                    app.config["UPLOAD_MIN_CONFIDENCE"],
                 ),
                 0.99,
             )
